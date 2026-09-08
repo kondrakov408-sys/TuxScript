@@ -1,4 +1,4 @@
--- Tux Script 🐧 | Minecraft-Style Roblox Exploit GUI
+-- Tux Script 🐧 | Minecraft-Style Roblox Exploit GUI (Mobile & PC Responsive Edition)
 -- Themes: Dark Glass, Neon Accents, Minecraft Cheat Columns (Celestial/Neverhook Style)
 
 local Players = game:GetService("Players")
@@ -49,7 +49,7 @@ local State = {
     
     -- Rage
     PunchEnabled = false,
-    PunchMode = "Combined", -- Impulser, Spin, Direct, Combined
+    PunchMode = "Combined",
     HitboxEnabled = false,
     HitboxSize = 10,
     Spinbot = false,
@@ -64,11 +64,10 @@ local State = {
     -- Visuals
     ESP = false,
     Tracers = false,
-    Nametags = false,
     Fullbright = false,
     
     -- Design
-    Theme = "DarkTux", -- DarkTux, NeonPurple, CyberCyan, Midnight
+    Theme = "DarkTux",
     GuiVisible = true
 }
 
@@ -133,8 +132,8 @@ registerInst(ScreenGui)
 ---------------------------------------------------------
 local LoaderFrame = Instance.new("Frame")
 LoaderFrame.Name = "LoaderFrame"
-LoaderFrame.Size = UDim2.new(0, 320, 0, 180)
-LoaderFrame.Position = UDim2.new(0.5, -160, 0.5, -90)
+LoaderFrame.Size = UDim2.new(0, 290, 0, 160)
+LoaderFrame.Position = UDim2.new(0.5, -145, 0.5, -80)
 LoaderFrame.BackgroundColor3 = currentTheme.Card
 LoaderFrame.BorderSizePixel = 0
 LoaderFrame.ClipsDescendants = true
@@ -150,28 +149,28 @@ LoaderStroke.Thickness = 2
 LoaderStroke.Parent = LoaderFrame
 
 local LoaderLogo = Instance.new("TextLabel")
-LoaderLogo.Size = UDim2.new(1, 0, 0, 50)
-LoaderLogo.Position = UDim2.new(0, 0, 0, 25)
+LoaderLogo.Size = UDim2.new(1, 0, 0, 45)
+LoaderLogo.Position = UDim2.new(0, 0, 0, 20)
 LoaderLogo.BackgroundTransparency = 1
 LoaderLogo.Text = "Tux Script 🐧"
 LoaderLogo.TextColor3 = currentTheme.Accent
-LoaderLogo.TextSize = 24
+LoaderLogo.TextSize = 22
 LoaderLogo.Font = Enum.Font.GothamBold
 LoaderLogo.Parent = LoaderFrame
 
 local LoaderStatus = Instance.new("TextLabel")
 LoaderStatus.Size = UDim2.new(1, 0, 0, 25)
-LoaderStatus.Position = UDim2.new(0, 0, 0, 75)
+LoaderStatus.Position = UDim2.new(0, 0, 0, 65)
 LoaderStatus.BackgroundTransparency = 1
-LoaderStatus.Text = "Initializing Minecraft Columns..."
+LoaderStatus.Text = "Loading Mobile & PC Interface..."
 LoaderStatus.TextColor3 = currentTheme.Text
-LoaderStatus.TextSize = 13
+LoaderStatus.TextSize = 12
 LoaderStatus.Font = Enum.Font.Gotham
 LoaderStatus.Parent = LoaderFrame
 
 local ProgressBarBg = Instance.new("Frame")
-ProgressBarBg.Size = UDim2.new(0.8, 0, 0, 8)
-ProgressBarBg.Position = UDim2.new(0.1, 0, 0, 120)
+ProgressBarBg.Size = UDim2.new(0.8, 0, 0, 6)
+ProgressBarBg.Position = UDim2.new(0.1, 0, 0, 105)
 ProgressBarBg.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
 ProgressBarBg.BorderSizePixel = 0
 ProgressBarBg.Parent = LoaderFrame
@@ -191,37 +190,43 @@ ProgressFillCorner.CornerRadius = UDim.new(1, 0)
 ProgressFillCorner.Parent = ProgressBarFill
 
 -- Animate Loader
-local loaderTweenInfo = TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local loaderTweenInfo = TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local progressTween = TweenService:Create(ProgressBarFill, loaderTweenInfo, {Size = UDim2.new(1, 0, 1, 0)})
 progressTween:Play()
 
 progressTween.Completed:Connect(function()
     LoaderStatus.Text = "Welcome, LO! Ready 🚀"
     task.wait(0.3)
-    local fadeOut = TweenService:Create(LoaderFrame, TweenInfo.new(0.5), {BackgroundTransparency = 1})
+    local fadeOut = TweenService:Create(LoaderFrame, TweenInfo.new(0.4), {BackgroundTransparency = 1})
     fadeOut:Play()
     for _, child in pairs(LoaderFrame:GetChildren()) do
         if child:IsA("TextLabel") or child:IsA("Frame") then
-            TweenService:Create(child, TweenInfo.new(0.4), {BackgroundTransparency = 1}):Play()
+            TweenService:Create(child, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
             if child:IsA("TextLabel") then
-                TweenService:Create(child, TweenInfo.new(0.4), {TextTransparency = 1}):Play()
+                TweenService:Create(child, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
             end
         end
     end
-    task.wait(0.5)
+    task.wait(0.4)
     LoaderFrame.Visible = false
 end)
 
 ---------------------------------------------------------
--- 2. TOP GLOBAL CONTROL BAR & MINECRAFT COLUMNS CONTAINER
+-- 2. RESPONSIVE MAIN CONTAINER (Mobile & PC Support)
 ---------------------------------------------------------
 local MainContainer = Instance.new("Frame")
 MainContainer.Name = "MainContainer"
-MainContainer.Size = UDim2.new(0, 950, 0, 480)
-MainContainer.Position = UDim2.new(0.5, -475, 0.5, -240)
+MainContainer.Size = UDim2.new(0.92, 0, 0.85, 0)
+MainContainer.Position = UDim2.new(0.04, 0, 0.075, 0)
 MainContainer.BackgroundTransparency = 1
 MainContainer.Visible = true
 MainContainer.Parent = ScreenGui
+
+-- Max/Min Size Bounds for PC & Mobile
+local SizeConstraint = Instance.new("UISizeConstraint")
+SizeConstraint.MaxSize = Vector2.new(960, 520)
+SizeConstraint.MinSize = Vector2.new(280, 260)
+SizeConstraint.Parent = MainContainer
 
 -- Top Header Bar
 local HeaderBar = Instance.new("Frame")
@@ -243,31 +248,20 @@ HeaderStroke.Thickness = 2
 HeaderStroke.Parent = HeaderBar
 
 local HeaderTitle = Instance.new("TextLabel")
-HeaderTitle.Size = UDim2.new(0, 250, 1, 0)
-HeaderTitle.Position = UDim2.new(0, 15, 0, 0)
+HeaderTitle.Size = UDim2.new(0.6, 0, 1, 0)
+HeaderTitle.Position = UDim2.new(0, 12, 0, 0)
 HeaderTitle.BackgroundTransparency = 1
-HeaderTitle.Text = "TuxScript 🐧 | Minecraft Cheat Edition"
+HeaderTitle.Text = "TuxScript 🐧"
 HeaderTitle.TextColor3 = currentTheme.Accent
 HeaderTitle.TextSize = 15
 HeaderTitle.Font = Enum.Font.GothamBold
 HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
 HeaderTitle.Parent = HeaderBar
 
-local KeybindNotice = Instance.new("TextLabel")
-KeybindNotice.Size = UDim2.new(0, 200, 1, 0)
-KeybindNotice.Position = UDim2.new(1, -310, 0, 0)
-KeybindNotice.BackgroundTransparency = 1
-KeybindNotice.Text = "[RAlt] to Hide/Show GUI"
-KeybindNotice.TextColor3 = currentTheme.Text
-KeybindNotice.TextSize = 12
-KeybindNotice.Font = Enum.Font.GothamMedium
-KeybindNotice.TextXAlignment = Enum.TextXAlignment.Right
-KeybindNotice.Parent = HeaderBar
-
 -- Header Buttons: Minimize & Full Close (Destroy)
 local MinimizeBtn = Instance.new("TextButton")
 MinimizeBtn.Size = UDim2.new(0, 32, 0, 28)
-MinimizeBtn.Position = UDim2.new(1, -78, 0, 7)
+MinimizeBtn.Position = UDim2.new(1, -74, 0, 7)
 MinimizeBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
 MinimizeBtn.Text = "─"
 MinimizeBtn.TextColor3 = currentTheme.Text
@@ -281,7 +275,7 @@ MinCorner.Parent = MinimizeBtn
 
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size = UDim2.new(0, 32, 0, 28)
-CloseBtn.Position = UDim2.new(1, -40, 0, 7)
+CloseBtn.Position = UDim2.new(1, -38, 0, 7)
 CloseBtn.BackgroundColor3 = Color3.fromRGB(235, 87, 87)
 CloseBtn.Text = "✕"
 CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -293,7 +287,7 @@ local CloseCorner = Instance.new("UICorner")
 CloseCorner.CornerRadius = UDim.new(0, 6)
 CloseCorner.Parent = CloseBtn
 
--- Make Main Container Draggable by HeaderBar
+-- Draggable HeaderBar
 local hDragging, hDragInput, hDragStart, hStartPos
 HeaderBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -321,20 +315,25 @@ registerConn(UserInputService.InputChanged:Connect(function(input)
     end
 end))
 
--- Columns Layout Area
-local ColumnsFrame = Instance.new("Frame")
+-- HORIZONTAL SCROLLING FRAME FOR COLUMNS (Touch Swipe Support on Mobile!)
+local ColumnsFrame = Instance.new("ScrollingFrame")
 ColumnsFrame.Name = "ColumnsFrame"
-ColumnsFrame.Size = UDim2.new(1, 0, 1, -50)
-ColumnsFrame.Position = UDim2.new(0, 0, 0, 50)
+ColumnsFrame.Size = UDim2.new(1, 0, 1, -48)
+ColumnsFrame.Position = UDim2.new(0, 0, 0, 48)
 ColumnsFrame.BackgroundTransparency = 1
+ColumnsFrame.BorderSizePixel = 0
+ColumnsFrame.ScrollBarThickness = 4
+ColumnsFrame.ScrollBarImageColor3 = currentTheme.Accent
+ColumnsFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ColumnsFrame.AutomaticCanvasSize = Enum.AutomaticSize.X
 ColumnsFrame.Parent = MainContainer
 
 local ColumnsLayout = Instance.new("UIListLayout")
 ColumnsLayout.Parent = ColumnsFrame
 ColumnsLayout.FillDirection = Enum.FillDirection.Horizontal
 ColumnsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-ColumnsLayout.Padding = UDim.new(0, 12)
-ColumnsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+ColumnsLayout.Padding = UDim.new(0, 10)
+ColumnsLayout.VerticalAlignment = Enum.VerticalAlignment.Top
 
 ---------------------------------------------------------
 -- MINECRAFT CATEGORY COLUMN BUILDER
@@ -344,7 +343,7 @@ local categoryColumns = {}
 local function createCategoryColumn(title, icon, layoutOrder)
     local col = Instance.new("Frame")
     col.Name = title .. "Column"
-    col.Size = UDim2.new(0, 180, 1, 0)
+    col.Size = UDim2.new(0, 165, 0.98, 0)
     col.BackgroundColor3 = currentTheme.Card
     col.BorderSizePixel = 0
     col.LayoutOrder = layoutOrder
@@ -361,12 +360,12 @@ local function createCategoryColumn(title, icon, layoutOrder)
 
     -- Column Header
     local cHeader = Instance.new("TextLabel")
-    cHeader.Size = UDim2.new(1, 0, 0, 36)
+    cHeader.Size = UDim2.new(1, 0, 0, 34)
     cHeader.Position = UDim2.new(0, 0, 0, 0)
     cHeader.BackgroundColor3 = currentTheme.Header
     cHeader.Text = icon .. "  " .. title
     cHeader.TextColor3 = currentTheme.Accent
-    cHeader.TextSize = 14
+    cHeader.TextSize = 13
     cHeader.Font = Enum.Font.GothamBold
     cHeader.Parent = col
 
@@ -376,8 +375,8 @@ local function createCategoryColumn(title, icon, layoutOrder)
 
     -- Scroll Area for Features inside Column
     local cScroll = Instance.new("ScrollingFrame")
-    cScroll.Size = UDim2.new(1, -12, 1, -44)
-    cScroll.Position = UDim2.new(0, 6, 0, 40)
+    cScroll.Size = UDim2.new(1, -10, 1, -40)
+    cScroll.Position = UDim2.new(0, 5, 0, 36)
     cScroll.BackgroundTransparency = 1
     cScroll.BorderSizePixel = 0
     cScroll.ScrollBarThickness = 3
@@ -416,7 +415,7 @@ local function addModuleToggle(parentScroll, name, defaultState, callback)
     btn.Text = name
     btn.TextColor3 = defaultState and Color3.fromRGB(17, 17, 27) or currentTheme.Text
     btn.Font = Enum.Font.GothamMedium
-    btn.TextSize = 12
+    btn.TextSize = 11
     btn.Parent = parentScroll
 
     local corner = Instance.new("UICorner")
@@ -438,7 +437,7 @@ end
 -- Create Module Slider
 local function addModuleSlider(parentScroll, name, min, max, defaultVal, callback)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0.96, 0, 0, 48)
+    frame.Size = UDim2.new(0.96, 0, 0, 46)
     frame.BackgroundColor3 = Color3.fromRGB(32, 32, 48)
     frame.Parent = parentScroll
 
@@ -447,18 +446,18 @@ local function addModuleSlider(parentScroll, name, min, max, defaultVal, callbac
     corner.Parent = frame
 
     local titleLbl = Instance.new("TextLabel")
-    titleLbl.Size = UDim2.new(1, -10, 0, 22)
+    titleLbl.Size = UDim2.new(1, -10, 0, 20)
     titleLbl.Position = UDim2.new(0, 5, 0, 2)
     titleLbl.BackgroundTransparency = 1
     titleLbl.Text = name .. ": " .. tostring(defaultVal)
     titleLbl.TextColor3 = currentTheme.Text
     titleLbl.Font = Enum.Font.Gotham
-    titleLbl.TextSize = 11
+    titleLbl.TextSize = 10
     titleLbl.Parent = frame
 
     local sliderBg = Instance.new("Frame")
     sliderBg.Size = UDim2.new(0.9, 0, 0, 6)
-    sliderBg.Position = UDim2.new(0.05, 0, 0, 30)
+    sliderBg.Position = UDim2.new(0.05, 0, 0, 28)
     sliderBg.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
     sliderBg.Parent = frame
 
@@ -627,13 +626,13 @@ PunchActionGui.Parent = guiParent
 registerInst(PunchActionGui)
 
 local PunchBtn = Instance.new("TextButton")
-PunchBtn.Size = UDim2.new(0, 70, 0, 70)
-PunchBtn.Position = UDim2.new(0.85, -35, 0.75, -35)
+PunchBtn.Size = UDim2.new(0, 65, 0, 65)
+PunchBtn.Position = UDim2.new(0.85, -33, 0.75, -33)
 PunchBtn.BackgroundColor3 = currentTheme.Accent
 PunchBtn.Text = "PUNCH\n🥊"
 PunchBtn.TextColor3 = Color3.fromRGB(17, 17, 27)
 PunchBtn.Font = Enum.Font.GothamBold
-PunchBtn.TextSize = 13
+PunchBtn.TextSize = 12
 PunchBtn.Parent = PunchActionGui
 
 local pCorner = Instance.new("UICorner")
@@ -1010,6 +1009,7 @@ for _, themeName in ipairs(themeList) do
         LoaderStroke.Color = currentTheme.Accent
         ProgressBarFill.BackgroundColor3 = currentTheme.Accent
         PunchBtn.BackgroundColor3 = currentTheme.Accent
+        ColumnsFrame.ScrollBarImageColor3 = currentTheme.Accent
         
         for _, col in pairs(ColumnsFrame:GetChildren()) do
             if col:IsA("Frame") then
@@ -1028,23 +1028,19 @@ end
 addModuleToggle(designScroll, "UNLOAD SCRIPT ❌", false, function()
     print("Unloading Tux Script 🐧...")
     
-    -- Disconnect All Signals
     for _, conn in ipairs(Connections) do
         pcall(function() conn:Disconnect() end)
     end
     
-    -- Restore Lighting
     Lighting.Brightness = OriginalLighting.Brightness
     Lighting.ClockTime = OriginalLighting.ClockTime
     Lighting.GlobalShadows = OriginalLighting.GlobalShadows
     Lighting.Ambient = OriginalLighting.Ambient
 
-    -- Clean Drawings
     for _, line in pairs(tracerLines) do
         pcall(function() line:Remove() end)
     end
 
-    -- Clean Instances & ScreenGui
     for _, inst in ipairs(InstancesToClean) do
         pcall(function() inst:Destroy() end)
     end
@@ -1062,12 +1058,11 @@ local isMinimized = false
 MinimizeBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     ColumnsFrame.Visible = not isMinimized
-    MainContainer.Size = isMinimized and UDim2.new(0, 950, 0, 42) or UDim2.new(0, 950, 0, 480)
+    MainContainer.Size = isMinimized and UDim2.new(0.92, 0, 0, 42) or UDim2.new(0.92, 0, 0.85, 0)
 end)
 
 -- Close Button (Unloads Script Completely)
 CloseBtn.MouseButton1Click:Connect(function()
-    -- Trigger Unload
     for _, conn in ipairs(Connections) do pcall(function() conn:Disconnect() end) end
     Lighting.Brightness = OriginalLighting.Brightness
     Lighting.ClockTime = OriginalLighting.ClockTime
@@ -1094,8 +1089,8 @@ MobileToggleGui.Parent = guiParent
 registerInst(MobileToggleGui)
 
 local MobileBtn = Instance.new("TextButton")
-MobileBtn.Size = UDim2.new(0, 45, 0, 45)
-MobileBtn.Position = UDim2.new(0, 15, 0.4, 0)
+MobileBtn.Size = UDim2.new(0, 48, 0, 48)
+MobileBtn.Position = UDim2.new(0, 12, 0.35, 0)
 MobileBtn.BackgroundColor3 = currentTheme.Header
 MobileBtn.Text = "🐧"
 MobileBtn.TextSize = 22
@@ -1110,9 +1105,35 @@ mStroke.Color = currentTheme.Accent
 mStroke.Thickness = 2
 mStroke.Parent = MobileBtn
 
+-- Make Mobile Toggle Button Draggable
+local mDrag, mInput, mStart, mPos
+MobileBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        mDrag = true
+        mStart = input.Position
+        mPos = MobileBtn.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then mDrag = false end
+        end)
+    end
+end)
+
+MobileBtn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        mInput = input
+    end
+end)
+
+registerConn(UserInputService.InputChanged:Connect(function(input)
+    if input == mInput and mDrag then
+        local delta = input.Position - mStart
+        MobileBtn.Position = UDim2.new(mPos.X.Scale, mPos.X.Offset + delta.X, mPos.Y.Scale, mPos.Y.Offset + delta.Y)
+    end
+end))
+
 MobileBtn.MouseButton1Click:Connect(function()
     State.GuiVisible = not State.GuiVisible
     MainContainer.Visible = State.GuiVisible
 end)
 
-print("Tux Script 🐧 Minecraft Cheat GUI initialized successfully!")
+print("Tux Script 🐧 Mobile & PC Minecraft GUI initialized successfully!")
