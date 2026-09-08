@@ -680,8 +680,6 @@ local function performSuperPunch()
     if not char then isPunching = false; return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     local humanoid = char:FindFirstChildOfClass("Humanoid")
-    local head = char:FindFirstChild("Head")
-    local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
     if not hrp or not humanoid then isPunching = false; return end
 
     -- 1. Visual Arm Swing Animation & Punch Effect
@@ -720,53 +718,69 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Knockback & Replicated Impulse on Target
+    -- 3. Perform Replicated Physics Knockback / Fling
     if targetHrp and targetHrp.Parent then
         local oldCF = hrp.CFrame
         local pushDir = (targetHrp.Position - hrp.Position).Unit
         if pushDir ~= pushDir or pushDir.Magnitude == 0 then pushDir = hrp.CFrame.LookVector end
 
-        local knockbackVector = (pushDir * 3500) + Vector3.new(0, 1500, 0)
+        -- Save body collisions of local character
+        local savedCollisions = {}
+        for _, part in pairs(char:GetChildren()) do
+            if part:IsA("BasePart") then
+                savedCollisions[part] = part.CanCollide
+                -- Turn off collision for limbs so local character joints aren't damaged
+                if part ~= hrp then
+                    part.CanCollide = false
+                end
+            end
+        end
 
-        -- Protect local character properties & states
-        local origCanTouch = hrp.CanTouch
+        -- Ensure HRP stays collidable & touchable
         hrp.CanTouch = true
+        hrp.CanCollide = true
 
-        -- Create temporary safe angular force for physics collision momentum transfer
+        -- Create maximum fling angular velocity
         local bav = Instance.new("BodyAngularVelocity")
         bav.Name = "TuxPunchSpin"
-        bav.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-        bav.AngularVelocity = Vector3.new(0, 15000, 0)
+        bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bav.AngularVelocity = Vector3.new(0, 99999, 0)
         bav.Parent = hrp
 
-        -- Brief physics contact & velocity impulse (0.12 sec contact window)
+        -- Fast 0.15 second physics impact window
+        local flingForce = (pushDir * 12000) + Vector3.new(0, 6000, 0)
         local startTime = tick()
-        while tick() - startTime < 0.12 do
+        while tick() - startTime < 0.15 do
             if targetHrp and targetHrp.Parent then
-                -- Apply direct knockback velocity to target player
-                pcall(function()
-                    targetHrp.AssemblyLinearVelocity = knockbackVector
-                end)
-                -- Move local player to target location to trigger client-side physics collision
+                targetHrp.CanCollide = true
                 hrp.CFrame = targetHrp.CFrame
-                hrp.AssemblyLinearVelocity = knockbackVector
+                hrp.AssemblyLinearVelocity = flingForce
             end
             RunService.Heartbeat:Wait()
         end
 
-        -- Clean up physics forces
+        -- Clean up angular velocity force
         bav:Destroy()
 
-        -- Restore local player position & reset momentum cleanly
+        -- Reset local velocities immediately
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+
+        -- Return local player safely to original position
+        hrp.CFrame = oldCF
+        
+        -- Heartbeat sync to stabilize physics without anchoring
+        RunService.Heartbeat:Wait()
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
         hrp.CFrame = oldCF
-        hrp.CanTouch = origCanTouch
 
-        -- Brief anchor freeze (1 frame) to prevent client rubberband / physics backlash
-        hrp.Anchored = true
-        RunService.Heartbeat:Wait()
-        hrp.Anchored = false
+        -- Restore original body part collisions
+        for part, canCollideState in pairs(savedCollisions) do
+            if part and part.Parent then
+                part.CanCollide = canCollideState
+            end
+        end
     end
 
     task.wait(0.15)
