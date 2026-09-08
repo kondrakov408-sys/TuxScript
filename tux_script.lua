@@ -670,7 +670,7 @@ registerConn(UserInputService.InputChanged:Connect(function(input)
     end
 end))
 
--- ANTI-CHEAT BYPASS SUPER PUNCH ENGINE (Replicated Kinetic Glove Impact)
+-- ANTI-CHEAT BYPASS SUPER PUNCH ENGINE (Workspace Kinetic Impact Wave)
 local isPunching = false
 local function performSuperPunch()
     if isPunching then return end
@@ -718,50 +718,40 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Replicated Glove Impact (Bypasses HRP Anti-Cheat & Protects Local Player)
+    -- 3. Execute Workspace Kinetic Impulse (LocalPlayer Character Remains Completely Stationary)
     if targetHrp and targetHrp.Parent then
         local pushDir = (targetHrp.Position - hrp.Position).Unit
         if pushDir ~= pushDir or pushDir.Magnitude == 0 then pushDir = hrp.CFrame.LookVector end
 
-        -- Create Replicated Kinetic Glove Part inside Character (inherits Network Ownership)
+        -- Create Kinetic Glove in Workspace (SEPARATE from LocalPlayer Character Assembly!)
         local glove = Instance.new("Part")
-        glove.Name = "TuxPunchGlove"
+        glove.Name = "TuxPunchImpactWave"
         glove.Shape = Enum.PartType.Ball
-        glove.Size = Vector3.new(6, 6, 6)
+        glove.Size = Vector3.new(7, 7, 7)
         glove.Color = currentTheme.Accent
         glove.Material = Enum.Material.Neon
         glove.Transparency = 0.3
         glove.CanCollide = true
         glove.CanTouch = true
-        glove.Massless = true
+        glove.Massless = false
         glove.CustomPhysicalProperties = PhysicalProperties.new(100, 1, 1, 1, 1)
         glove.CFrame = targetHrp.CFrame
-        glove.Parent = char
+        glove.Parent = Workspace -- MUST be in Workspace so LocalPlayer character never moves!
 
-        -- Prevent Glove from colliding with Local Player's own character
-        for _, localPart in pairs(char:GetChildren()) do
-            if localPart:IsA("BasePart") then
-                local ncc = Instance.new("NoCollisionConstraint")
-                ncc.Part0 = glove
-                ncc.Part1 = localPart
-                ncc.Parent = glove
-            end
-        end
-
-        -- Angular Spin on Glove for Maximum Physics Momentum Transfer
+        -- Angular Spin on Impact Object for Maximum Momentum Transfer
         local bav = Instance.new("BodyAngularVelocity")
         bav.Name = "TuxGloveSpin"
         bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
         bav.AngularVelocity = Vector3.new(0, 99999, 0)
         bav.Parent = glove
 
-        -- High-Velocity Impact Impulse Vector
-        local knockbackVector = (pushDir * 12000) + Vector3.new(0, 5000, 0)
+        -- High Velocity Vector
+        local knockbackVector = (pushDir * 20000) + Vector3.new(0, 8000, 0)
         local startTime = tick()
 
         while tick() - startTime < 0.18 do
             if targetHrp and targetHrp.Parent and glove and glove.Parent then
-                targetHrp.CanCollide = true
+                pcall(function() targetHrp.CanCollide = true end)
                 glove.CFrame = targetHrp.CFrame
                 glove.AssemblyLinearVelocity = knockbackVector
             else
