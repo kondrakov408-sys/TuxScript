@@ -705,14 +705,15 @@ local function performSuperPunch()
         end
     end)
 
-    -- 2. Detect Closest Target Player (within 50 studs)
+    -- 2. Detect Closest Target Player (Expanded Range: 300 studs)
     local targetHrp = nil
-    local closestDist = 50
+    local closestDist = 300
 
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local tHrp = player.Character:FindFirstChild("HumanoidRootPart")
-            if tHrp then
+            local tHum = player.Character:FindFirstChildOfClass("Humanoid")
+            if tHrp and tHum and tHum.Health > 0 then
                 local dist = (tHrp.Position - hrp.Position).Magnitude
                 if dist < closestDist then
                     closestDist = dist
@@ -722,7 +723,7 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Pure Rotational Spin Fling (Zero Linear Velocity on LocalPlayer)
+    -- 3. Execute Pure Rotational Spin Fling (Predictive Velocity Tracking for Moving Targets)
     if targetHrp and targetHrp.Parent then
         local oldCF = hrp.CFrame
 
@@ -750,12 +751,15 @@ local function performSuperPunch()
         bav.AngularVelocity = Vector3.new(0, 999999, 0)
         bav.Parent = hrp
 
-        -- Contact Window (0.15s of pure rotational collision)
+        -- Extended Contact Window (0.22s) with Predictive CFrame offset for fast-moving targets
         local startTime = tick()
-        while tick() - startTime < 0.15 do
+        while tick() - startTime < 0.22 do
             if targetHrp and targetHrp.Parent then
-                hrp.CFrame = targetHrp.CFrame
-                hrp.AssemblyLinearVelocity = Vector3.zero -- ZERO linear velocity so local player stays stationary!
+                -- Target velocity prediction offset ensures direct contact on moving players!
+                local tVel = targetHrp.AssemblyLinearVelocity
+                local predictOffset = (tVel.Magnitude > 2) and (tVel * 0.035) or Vector3.zero
+                hrp.CFrame = targetHrp.CFrame + predictOffset
+                hrp.AssemblyLinearVelocity = Vector3.zero
             else
                 break
             end
