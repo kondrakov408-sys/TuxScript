@@ -670,7 +670,7 @@ registerConn(UserInputService.InputChanged:Connect(function(input)
     end
 end))
 
--- AUTHENTIC REPLICATED SUPER PUNCH FLING (Y-Axis Upright Physics Collision)
+-- AUTHENTIC REPLICATED SUPER PUNCH FLING (Rotational Spin Collision & Non-Looping Animation)
 local isPunching = false
 local function performSuperPunch()
     if isPunching then return end
@@ -682,14 +682,18 @@ local function performSuperPunch()
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not humanoid then isPunching = false; return end
 
-    -- 1. Visual Arm Swing Animation
+    -- 1. Single-Play Arm Swing Animation (No Looping!)
     task.spawn(function()
         pcall(function()
             local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
             local anim = Instance.new("Animation")
             anim.AnimationId = char:FindFirstChild("UpperTorso") and "rbxassetid://507770453" or "rbxassetid://125750799"
             local track = animator:LoadAnimation(anim)
+            track.Looped = false
             track:Play(0.05, 1, 2.5)
+            task.delay(0.35, function()
+                pcall(function() track:Stop() end)
+            end)
         end)
 
         local shoulder = char:FindFirstChild("Right Shoulder", true) or char:FindFirstChild("RightShoulder", true)
@@ -718,11 +722,9 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Upright Y-Axis Physics Fling
+    -- 3. Execute Pure Rotational Spin Fling (Zero Linear Velocity on LocalPlayer)
     if targetHrp and targetHrp.Parent then
         local oldCF = hrp.CFrame
-        local pushDir = (targetHrp.Position - hrp.Position).Unit
-        if pushDir ~= pushDir or pushDir.Magnitude == 0 then pushDir = hrp.CFrame.LookVector end
 
         -- Save & Protect Humanoid Health / Dead States so LocalPlayer cannot die
         local origDeadState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead)
@@ -741,21 +743,19 @@ local function performSuperPunch()
             end
         end))
 
-        -- Pure Y-Axis Angular Velocity (MaxTorque X=0, Z=0 keeps character upright, preventing neck break / death!)
+        -- Pure Y-Axis Rotational Velocity (Zero Linear Velocity ensures LocalPlayer never flies away!)
         local bav = Instance.new("BodyAngularVelocity")
         bav.Name = "TuxPunchFlingSpin"
         bav.MaxTorque = Vector3.new(0, math.huge, 0)
         bav.AngularVelocity = Vector3.new(0, 999999, 0)
         bav.Parent = hrp
 
-        -- Brief 0.15 second physics collision contact window
-        local flingVelocity = (pushDir * 4000) + Vector3.new(0, 1500, 0)
+        -- Contact Window (0.15s of pure rotational collision)
         local startTime = tick()
-
         while tick() - startTime < 0.15 do
             if targetHrp and targetHrp.Parent then
                 hrp.CFrame = targetHrp.CFrame
-                hrp.AssemblyLinearVelocity = flingVelocity
+                hrp.AssemblyLinearVelocity = Vector3.zero -- ZERO linear velocity so local player stays stationary!
             else
                 break
             end
