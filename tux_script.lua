@@ -781,9 +781,10 @@ local function performSuperPunch()
             bav.AngularVelocity = Vector3.new(999999, 999999, 999999)
             bav.Parent = hrp
 
+            -- Extended Auto-Tracking Pursuit Window (0.45s per attempt for moving targets)
+            local attemptWindow = 0.45
             local startTime = tick()
             local lastTime = startTime
-            local attemptWindow = (attempt == 1) and 0.18 or 0.15
 
             while tick() - startTime < attemptWindow do
                 if targetCharacter and targetCharacter.Parent and targetPart and targetPart.Parent then
@@ -795,13 +796,13 @@ local function performSuperPunch()
                     local tVel = targetPart.AssemblyLinearVelocity
                     local tSpeed = tVel.Magnitude
 
-                    -- Target Velocity Analysis: Instant Detachment when target is launched!
-                    if tSpeed > 100 then
+                    -- Target Velocity Analysis: Detach when target is launched!
+                    if tSpeed > 150 then
                         flingSuccess = true
                         break
                     end
 
-                    -- Target Collision Enforcement on every frame
+                    -- Force CanCollide & CanTouch on target parts continuously
                     pcall(function()
                         for _, p in pairs(targetCharacter:GetChildren()) do
                             if p:IsA("BasePart") then
@@ -811,12 +812,12 @@ local function performSuperPunch()
                         end
                     end)
 
-                    -- Kinematic Lead Prediction (AssemblyVelocity + Humanoid MoveDirection)
+                    -- Auto-Tracking Kinematic Pursuit (Continuously locks and flies after moving target)
                     local moveLead = Vector3.zero
                     if tHum and tHum.MoveDirection.Magnitude > 0 then
-                        moveLead = tHum.MoveDirection * (tHum.WalkSpeed or 16) * dt * 2.2
+                        moveLead = tHum.MoveDirection * (tHum.WalkSpeed or 16) * dt * 2.5
                     end
-                    local velLead = (tSpeed > 1) and (tVel * dt * 2.5) or Vector3.zero
+                    local velLead = (tSpeed > 1) and (tVel * dt * 3.0) or Vector3.zero
                     local totalLead = velLead + moveLead
 
                     -- Dynamic 360-degree randomized impact angle
