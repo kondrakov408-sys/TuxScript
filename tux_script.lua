@@ -436,7 +436,7 @@ SettingsArrowBtn.MouseButton1Click:Connect(function()
 end)
 
 ---------------------------------------------------------
--- REAL INFINITE YIELD STYLE FLING (Target Launched, You Safe!)
+-- REAL INFINITE YIELD STYLE FLING WITH ANCHOR ANTI-DEATH
 ---------------------------------------------------------
 local isPunching = false
 local function performSuperPunch()
@@ -509,7 +509,6 @@ local function performSuperPunch()
         end
 
         if mode == "Impulser" then
-            -- Mode 1: Rotor Spin Fling (Infinite Yield Standard)
             local bav = Instance.new("BodyAngularVelocity")
             bav.Name = "TuxRotorFling"
             bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
@@ -517,7 +516,7 @@ local function performSuperPunch()
             bav.Parent = hrp
 
             local startTime = tick()
-            while tick() - startTime < 0.25 do
+            while tick() - startTime < 0.22 do
                 if targetHrp and targetHrp.Parent then
                     hrp.CFrame = targetHrp.CFrame * CFrame.new(0, 0, 0)
                     hrp.AssemblyLinearVelocity = Vector3.new(9999, 9999, 9999)
@@ -527,7 +526,6 @@ local function performSuperPunch()
             bav:Destroy()
 
         elseif mode == "Spin" then
-            -- Mode 2: Angular Sweep Fling
             local bav = Instance.new("BodyAngularVelocity")
             bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
             bav.AngularVelocity = Vector3.new(999999, 999999, 999999)
@@ -535,7 +533,7 @@ local function performSuperPunch()
 
             local startTime = tick()
             local angle = 0
-            while tick() - startTime < 0.25 do
+            while tick() - startTime < 0.22 do
                 angle = angle + 90
                 if targetHrp and targetHrp.Parent then
                     hrp.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(angle), 0) * CFrame.new(0, 0, 0.5)
@@ -545,7 +543,6 @@ local function performSuperPunch()
             bav:Destroy()
 
         elseif mode == "Direct" then
-            -- Mode 3: Linear Push Dash
             local bv = Instance.new("BodyVelocity")
             bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
             bv.Velocity = (pushDir * 5000) + Vector3.new(0, 2500, 0)
@@ -568,7 +565,7 @@ local function performSuperPunch()
 
             local startTime = tick()
             local angle = 0
-            while tick() - startTime < 0.25 do
+            while tick() - startTime < 0.22 do
                 angle = angle + 120
                 if targetHrp and targetHrp.Parent then
                     hrp.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(angle), 0)
@@ -579,20 +576,38 @@ local function performSuperPunch()
             bav:Destroy()
         end
 
-        -- Restoration & Safety Reset
+        ---------------------------------------------------------
+        -- ANCHOR ANTI-DEATH RESTORATION ENGINE
+        ---------------------------------------------------------
+        -- 1. Instantly Anchor RootPart & Freeze Physics Momentum
+        hrp.Anchored = true
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
+
+        -- 2. Teleport back to safe origin position while anchored
         hrp.CFrame = origCF
 
-        humanoid.PlatformStand = false
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, origDeadState)
+        -- 3. Wait 1 Heartbeat frame while anchored so server clears momentum
+        RunService.Heartbeat:Wait()
 
-        -- Restore Limb Collisions
+        -- 4. Unanchor & Restore Standing State
+        hrp.Anchored = false
+        humanoid.PlatformStand = false
+        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+
+        -- 5. Restore Limb Collisions
         for _, part in pairs(char:GetChildren()) do
             if part:IsA("BasePart") then
                 part.CanCollide = true
             end
         end
+
+        -- 6. Delayed re-enable of Dead State so delayed physics packets don't kill character
+        task.delay(0.4, function()
+            if humanoid and humanoid.Parent then
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, origDeadState)
+            end
+        end)
     end
 
     task.wait(0.15)
