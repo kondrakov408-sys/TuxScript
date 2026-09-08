@@ -705,26 +705,36 @@ local function performSuperPunch()
         end
     end)
 
-    -- 2. Detect Closest Target Player (Range: 150 studs)
-    local targetHrp = nil
+    -- 2. Detect Closest Target Player (Universal R6 / R15 / Rthro / Custom Avatar Support)
+    local targetCharacter = nil
+    local targetPart = nil
     local closestDist = 150
 
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
-            local tHrp = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("Torso")
-            local tHum = player.Character:FindFirstChildOfClass("Humanoid")
-            if tHrp and tHum and tHum.Health > 0 then
-                local dist = (tHrp.Position - hrp.Position).Magnitude
+            local tChar = player.Character
+            local tHum = tChar:FindFirstChildOfClass("Humanoid")
+            
+            -- Multi-part fallback to find valid target part on any avatar structure
+            local tMainPart = tChar:FindFirstChild("HumanoidRootPart")
+                or tChar:FindFirstChild("Torso")
+                or tChar:FindFirstChild("UpperTorso")
+                or tChar:FindFirstChild("LowerTorso")
+                or tChar:FindFirstChildOfClass("BasePart")
+
+            if tMainPart and (not tHum or tHum.Health > 0) then
+                local dist = (tMainPart.Position - hrp.Position).Magnitude
                 if dist < closestDist then
                     closestDist = dist
-                    targetHrp = tHrp
+                    targetCharacter = tChar
+                    targetPart = tMainPart
                 end
             end
         end
     end
 
-    -- 3. Execute Physics Fling with Instant Detachment
-    if targetHrp and targetHrp.Parent then
+    -- 3. Execute Universal Physics Fling (Instant Detachment & Anti-Void Security)
+    if targetCharacter and targetPart and targetCharacter.Parent then
         local oldCF = hrp.CFrame
 
         -- Save & Protect Humanoid Health / Dead States so LocalPlayer cannot die
@@ -762,16 +772,26 @@ local function performSuperPunch()
         bav.AngularVelocity = Vector3.new(0, 999999, 0)
         bav.Parent = hrp
 
-        -- Fling Contact Window: Instantly detach the MOMENT target gets flung!
+        -- Universal Avatar Fling Contact Window (0.18s max)
         local startTime = tick()
-        while tick() - startTime < 0.15 do
-            if targetHrp and targetHrp.Parent then
-                -- CRITICAL FIX: Stop following target if target has already been launched!
-                if targetHrp.AssemblyLinearVelocity.Magnitude > 100 then
+        while tick() - startTime < 0.18 do
+            if targetCharacter and targetCharacter.Parent and targetPart and targetPart.Parent then
+                -- Check if target has already been flung (velocity check across root part or main part)
+                local currentVel = targetPart.AssemblyLinearVelocity.Magnitude
+                if currentVel > 100 then
                     break
                 end
 
-                hrp.CFrame = targetHrp.CFrame
+                -- Force CanCollide true on target's primary parts so collision impact is 100% registered
+                pcall(function()
+                    for _, p in pairs(targetCharacter:GetChildren()) do
+                        if p:IsA("BasePart") and (p.Name == "HumanoidRootPart" or p.Name == "Torso" or p.Name == "UpperTorso" or p.Name == "LowerTorso") then
+                            p.CanCollide = true
+                        end
+                    end
+                end)
+
+                hrp.CFrame = targetPart.CFrame
                 hrp.AssemblyLinearVelocity = Vector3.zero
             else
                 break
