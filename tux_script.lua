@@ -386,8 +386,8 @@ SettingsPadding.Parent = SettingsPanel
 local modesList = {
     {id = "Combined", label = "Mode: 3-in-1 Combined 🔥"},
     {id = "Impulser", label = "Mode 1: Block Impulse 📦"},
-    {id = "Spin", label = "Mode 2: Orbital Spin 🌀"},
-    {id = "Direct", label = "Mode 3: Direct Velocity ⚡"}
+    {id = "Spin", label = "Mode 2: Ghost Proxy Spin 🌀"},
+    {id = "Direct", label = "Mode 3: Touch Impulse Surge ⚡"}
 }
 
 local modeButtons = {}
@@ -436,7 +436,7 @@ SettingsArrowBtn.MouseButton1Click:Connect(function()
 end)
 
 ---------------------------------------------------------
--- PUNCH EXECUTION WITH SELECTED MODE
+-- SAFE TARGET-ONLY FLING EXECUTION (LocalPlayer Stays Safe!)
 ---------------------------------------------------------
 local isPunching = false
 local function performSuperPunch()
@@ -449,7 +449,7 @@ local function performSuperPunch()
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not humanoid then isPunching = false; return end
 
-    -- 1. Animation Track & Procedural Arm Swing
+    -- 1. Visual Punch Swing (Local Player Arm Rotation Only)
     task.spawn(function()
         pcall(function()
             local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
@@ -468,9 +468,9 @@ local function performSuperPunch()
         end
     end)
 
-    -- 2. Detect Target Player
+    -- 2. Detect Closest Target Player
     local targetHrp = nil
-    local closestDist = 45
+    local closestDist = 50
 
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
@@ -485,67 +485,87 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Selected Mode
+    -- 3. Execute Fling directly ON TARGET (LocalPlayer stays completely untouched!)
     if targetHrp then
         local pushDir = (targetHrp.Position - hrp.Position).Unit
         if pushDir ~= pushDir then pushDir = hrp.CFrame.LookVector end
         local mode = State.PunchMode
 
-        -- MODE 1: Physics Impulser Block
+        -- MODE 1: Heavy Impulser Block (Proxy Physics Part)
         if mode == "Impulser" or mode == "Combined" then
-            local flingPart = Instance.new("Part")
-            flingPart.Size = Vector3.new(6, 6, 6)
-            flingPart.Transparency = 1
-            flingPart.CanCollide = true
-            flingPart.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 100, 100, 100)
-            flingPart.CFrame = targetHrp.CFrame
-            flingPart.Parent = Workspace
+            task.spawn(function()
+                local b = Instance.new("Part")
+                b.Size = Vector3.new(7, 7, 7)
+                b.Transparency = 1
+                b.CanCollide = true
+                b.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 100, 100, 100)
+                b.CFrame = targetHrp.CFrame
+                b.Parent = Workspace
 
-            local bav = Instance.new("BodyAngularVelocity")
-            bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-            bav.AngularVelocity = Vector3.new(99999, 99999, 99999)
-            bav.Parent = flingPart
+                local bav = Instance.new("BodyAngularVelocity")
+                bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                bav.AngularVelocity = Vector3.new(99999, 99999, 99999)
+                bav.Parent = b
 
-            local bv = Instance.new("BodyVelocity")
-            bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            bv.Velocity = (pushDir * 6000) + Vector3.new(0, 2500, 0)
-            bv.Parent = flingPart
+                local bv = Instance.new("BodyVelocity")
+                bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                bv.Velocity = (pushDir * 8000) + Vector3.new(0, 3500, 0)
+                bv.Parent = b
 
-            task.delay(0.2, function()
-                flingPart:Destroy()
+                task.wait(0.22)
+                b:Destroy()
             end)
         end
 
-        -- MODE 2: Orbital Spin Fling
+        -- MODE 2: Ghost Proxy Spin (Proxy Block Orbiting Target)
         if mode == "Spin" or mode == "Combined" then
-            local origCF = hrp.CFrame
-            local startTime = tick()
-            local stepAngle = 0
+            task.spawn(function()
+                local ghostPart = Instance.new("Part")
+                ghostPart.Size = Vector3.new(6, 6, 6)
+                ghostPart.Transparency = 1
+                ghostPart.CanCollide = true
+                ghostPart.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 100, 100, 100)
+                ghostPart.Parent = Workspace
 
-            local bav = Instance.new("BodyAngularVelocity")
-            bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-            bav.AngularVelocity = Vector3.new(0, 999999, 0)
-            bav.Parent = hrp
+                local bav = Instance.new("BodyAngularVelocity")
+                bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                bav.AngularVelocity = Vector3.new(0, 999999, 0)
+                bav.Parent = ghostPart
 
-            while tick() - startTime < 0.22 do
-                stepAngle = stepAngle + 120
-                if targetHrp and targetHrp.Parent then
-                    hrp.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(stepAngle), 0) * CFrame.new(0, 0, 0.1)
-                    hrp.AssemblyLinearVelocity = (pushDir * 4000) + Vector3.new(0, 2000, 0)
+                local startTime = tick()
+                local stepAngle = 0
+                while tick() - startTime < 0.22 do
+                    stepAngle = stepAngle + 120
+                    if targetHrp and targetHrp.Parent then
+                        ghostPart.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(stepAngle), 0)
+                        ghostPart.AssemblyLinearVelocity = (pushDir * 7000) + Vector3.new(0, 3000, 0)
+                    end
+                    RunService.Heartbeat:Wait()
                 end
-                RunService.Heartbeat:Wait()
-            end
-
-            bav:Destroy()
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.CFrame = origCF
+                ghostPart:Destroy()
+            end)
         end
 
-        -- MODE 3: Direct Velocity Overwrite
+        -- MODE 3: Touch Impulse Surge
         if mode == "Direct" or mode == "Combined" then
-            pcall(function()
-                targetHrp.AssemblyLinearVelocity = (pushDir * 5000) + Vector3.new(0, 2500, 0)
-                targetHrp.AssemblyAngularVelocity = Vector3.new(99999, 99999, 99999)
+            task.spawn(function()
+                local touchPart = Instance.new("Part")
+                touchPart.Size = Vector3.new(8, 8, 8)
+                touchPart.Transparency = 1
+                touchPart.CanCollide = true
+                touchPart.CFrame = targetHrp.CFrame
+                touchPart.Parent = Workspace
+
+                pcall(function()
+                    if firetouchinterest then
+                        firetouchinterest(touchPart, targetHrp, 0)
+                        firetouchinterest(touchPart, targetHrp, 1)
+                    end
+                    targetHrp.AssemblyLinearVelocity = (pushDir * 8000) + Vector3.new(0, 3500, 0)
+                    targetHrp.AssemblyAngularVelocity = Vector3.new(99999, 99999, 99999)
+                end)
+                task.wait(0.2)
+                touchPart:Destroy()
             end)
         end
     end
