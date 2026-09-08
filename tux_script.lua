@@ -733,7 +733,7 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Smart Multi-Attempt Dynamic Fling Engine (Up to 3 Adaptive Burst Retries per Click)
+    -- 3. Execute Smart Multi-Attempt Dynamic Fling Engine
     if targetCharacter and targetPart and targetCharacter.Parent then
         local homeCF = hrp.CFrame
 
@@ -765,7 +765,6 @@ local function performSuperPunch()
             end
         end))
 
-        -- Smart Adaptive Retry Burst Loop (Executes up to 3 smart strikes if target resists or dodges)
         local maxAttempts = 3
         local flingSuccess = false
 
@@ -774,35 +773,38 @@ local function performSuperPunch()
                 break
             end
 
-            -- 3D Multi-Axis Spinbot Force
+            -- High Velocity Spin Forces (Linear + Angular)
             local bav = Instance.new("BodyAngularVelocity")
             bav.Name = "TuxPunchFlingSpin"
             bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-            bav.AngularVelocity = Vector3.new(999999, 999999, 999999)
+            bav.AngularVelocity = Vector3.new(2000000, 2000000, 2000000)
             bav.Parent = hrp
 
-            -- Extended Auto-Tracking Pursuit Window (0.45s per attempt for moving targets)
-            local attemptWindow = 0.45
+            local bvl = Instance.new("BodyVelocity")
+            bvl.Name = "TuxPunchFlingVel"
+            bvl.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bvl.Velocity = Vector3.new(2000000, 2000000, 2000000)
+            bvl.Parent = hrp
+
+            local attemptWindow = 0.55
             local startTime = tick()
-            local lastTime = startTime
+            local lastPos = targetPart.Position
 
             while tick() - startTime < attemptWindow do
                 if targetCharacter and targetCharacter.Parent and targetPart and targetPart.Parent then
-                    local now = tick()
-                    local dt = math.clamp(now - lastTime, 0.001, 0.05)
-                    lastTime = now
+                    local currentPos = targetPart.Position
+                    local measuredVel = (currentPos - lastPos) / math.max(RunService.Heartbeat:Wait(), 0.001)
+                    lastPos = currentPos
 
-                    local tHum = targetCharacter:FindFirstChildOfClass("Humanoid")
-                    local tVel = targetPart.AssemblyLinearVelocity
-                    local tSpeed = tVel.Magnitude
+                    local tSpeed = measuredVel.Magnitude
 
-                    -- Target Velocity Analysis: Detach when target is launched!
-                    if tSpeed > 150 then
+                    -- Target Detachment check: stop if target launched into atmosphere
+                    if tSpeed > 300 then
                         flingSuccess = true
                         break
                     end
 
-                    -- Force CanCollide & CanTouch on target parts continuously
+                    -- Ensure contact collision on target parts
                     pcall(function()
                         for _, p in pairs(targetCharacter:GetChildren()) do
                             if p:IsA("BasePart") then
@@ -812,34 +814,35 @@ local function performSuperPunch()
                         end
                     end)
 
-                    -- Auto-Tracking Kinematic Pursuit (Continuously locks and flies after moving target)
-                    local moveLead = Vector3.zero
-                    if tHum and tHum.MoveDirection.Magnitude > 0 then
-                        moveLead = tHum.MoveDirection * (tHum.WalkSpeed or 16) * dt * 2.5
-                    end
-                    local velLead = (tSpeed > 1) and (tVel * dt * 3.0) or Vector3.zero
-                    local totalLead = velLead + moveLead
+                    -- Kinematic Prediction: Calculate exact position based on target velocity vector
+                    local predictedPos = currentPos + measuredVel * 0.12
 
-                    -- Dynamic 360-degree randomized impact angle
+                    -- High Velocity Rotational Contact Position
                     local randAngle = CFrame.Angles(
-                        math.rad(math.random(-180, 180)),
-                        math.rad(math.random(-180, 180)),
-                        math.rad(math.random(-180, 180))
+                        math.rad(math.random(-360, 360)),
+                        math.rad(math.random(-360, 360)),
+                        math.rad(math.random(-360, 360))
                     )
 
-                    hrp.AssemblyAngularVelocity = Vector3.new(999999, 999999, 999999)
-                    hrp.CFrame = (targetPart.CFrame + totalLead) * randAngle
-                    hrp.AssemblyLinearVelocity = Vector3.zero
+                    hrp.AssemblyAngularVelocity = Vector3.new(2000000, 2000000, 2000000)
+                    hrp.AssemblyLinearVelocity = Vector3.new(2000000, 2000000, 2000000)
+                    hrp.CFrame = CFrame.new(predictedPos) * randAngle
+
+                    -- Force physical reaction on target part directly if network ownership permits
+                    pcall(function()
+                        targetPart.AssemblyLinearVelocity = (measuredVel + Vector3.new(math.random(-500, 500), 1000, math.random(-500, 500))) * 15
+                        targetPart.AssemblyAngularVelocity = Vector3.new(2000000, 2000000, 2000000)
+                    end)
                 else
                     break
                 end
-                RunService.Heartbeat:Wait()
             end
 
-            -- Clean up Spin Force for this attempt
+            -- Clean up spin/velocity forces for this attempt
             bav:Destroy()
+            bvl:Destroy()
 
-            -- Reset position to home CFrame safely between attempts
+            -- Reset position safely between attempts
             hrp.AssemblyLinearVelocity = Vector3.zero
             hrp.AssemblyAngularVelocity = Vector3.zero
             hrp.CFrame = homeCF
@@ -848,17 +851,15 @@ local function performSuperPunch()
             RunService.Heartbeat:Wait()
             hrp.Anchored = false
 
-            -- Smart Target Analyzer: Check if target got launched!
-            if flingSuccess or (targetPart and targetPart.Parent and targetPart.AssemblyLinearVelocity.Magnitude > 100) then
+            if flingSuccess or (targetPart and targetPart.Parent and targetPart.AssemblyLinearVelocity.Magnitude > 150) then
                 flingSuccess = true
-                break -- Target launched! Stop retrying.
+                break
             end
 
-            -- Brief 0.02s pause before next smart strike attempt if target resisted
             task.wait(0.02)
         end
 
-        -- Clean Final Home Recovery
+        -- Final Recovery & Cleanup
         healthLock:Disconnect()
 
         hrp.AssemblyLinearVelocity = Vector3.zero
@@ -874,14 +875,14 @@ local function performSuperPunch()
         hrp.AssemblyAngularVelocity = Vector3.zero
         hrp.CFrame = homeCF
 
-        -- Restore original body part collisions
+        -- Restore original collisions
         for part, canCollideState in pairs(savedCollisions) do
             if part and part.Parent then
                 part.CanCollide = canCollideState
             end
         end
 
-        -- Restore Humanoid Dead state after delay
+        -- Restore Humanoid states
         task.delay(1.0, function()
             if humanoid and humanoid.Parent then
                 humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, origDeadState)
