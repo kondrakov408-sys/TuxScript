@@ -670,7 +670,7 @@ registerConn(UserInputService.InputChanged:Connect(function(input)
     end
 end))
 
--- Protected Fling Action
+-- Protected Workspace Proxy Fling (Local Player Stays Safe & Unmoved!)
 local isPunching = false
 local function performSuperPunch()
     if isPunching then return end
@@ -717,24 +717,26 @@ local function performSuperPunch()
         end
     end
 
-    -- Execute Protected Proxy Fling
+    -- Execute Workspace Proxy Part Fling
     if targetHrp then
         local pushDir = (targetHrp.Position - hrp.Position).Unit
         if pushDir ~= pushDir then pushDir = hrp.CFrame.LookVector end
 
+        -- Spawn Proxy Part in Workspace so it NEVER exerts recoil force on LocalPlayer
         local flingPart = Instance.new("Part")
         flingPart.Name = "TuxFlingProxy"
-        flingPart.Size = Vector3.new(6, 6, 6)
+        flingPart.Size = Vector3.new(5, 5, 5)
         flingPart.Transparency = 1
         flingPart.CanCollide = true
         flingPart.CanTouch = true
-        flingPart.Massless = true
+        flingPart.Massless = false
         flingPart.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 100, 100, 100)
         flingPart.CFrame = targetHrp.CFrame
-        flingPart.Parent = char
+        flingPart.Parent = Workspace
 
+        -- Isolate from Local Player Parts
         for _, part in pairs(char:GetDescendants()) do
-            if part:IsA("BasePart") and part ~= flingPart then
+            if part:IsA("BasePart") then
                 local ncc = Instance.new("NoCollisionConstraint")
                 ncc.Part0 = flingPart
                 ncc.Part1 = part
@@ -744,12 +746,12 @@ local function performSuperPunch()
 
         local bav = Instance.new("BodyAngularVelocity")
         bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bav.AngularVelocity = Vector3.new(999999, 999999, 999999)
+        bav.AngularVelocity = Vector3.new(99999, 99999, 99999)
         bav.Parent = flingPart
 
         local bv = Instance.new("BodyVelocity")
         bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bv.Velocity = (pushDir * 7000) + Vector3.new(0, 3000, 0)
+        bv.Velocity = (pushDir * 6000) + Vector3.new(0, 2500, 0)
         bv.Parent = flingPart
 
         local startTime = tick()
@@ -758,9 +760,11 @@ local function performSuperPunch()
             angle = angle + 120
             if targetHrp and targetHrp.Parent then
                 flingPart.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(angle), 0)
+                flingPart.AssemblyLinearVelocity = (pushDir * 6000) + Vector3.new(0, 2500, 0)
             end
             RunService.Heartbeat:Wait()
         end
+
         flingPart:Destroy()
     end
 
