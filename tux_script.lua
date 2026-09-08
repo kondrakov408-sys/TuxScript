@@ -813,16 +813,15 @@ local function performSuperPunch()
                 end)
             end
 
-            -- B. HITBOX EXPANSION ON TARGET (Guarantees strike on moving targets with any avatar)
+            -- B. HITBOX EXPANSION ON TARGET (16x16x16: guarantees hits on walking/jumping targets)
             local origTargetSize = targetPart.Size
             local origTargetCanCollide = targetPart.CanCollide
             pcall(function()
-                targetPart.Size = Vector3.new(12, 12, 12)
+                targetPart.Size = Vector3.new(16, 16, 16)
                 targetPart.CanCollide = true
             end)
 
-            -- C. AUTOMATIC COMBAT WEAPON & REMOTE HIT REGISTRATION
-            -- Auto-equip tool from backpack if hands are empty
+            -- C. AUTOMATIC COMBAT WEAPON & COMBAT REMOTES
             if not char:FindFirstChildOfClass("Tool") then
                 local backpack = LocalPlayer:FindFirstChild("Backpack")
                 if backpack then
@@ -833,14 +832,6 @@ local function performSuperPunch()
                 end
             end
 
-            -- Activate any equipped tool (fist, sword, glove)
-            for _, item in pairs(char:GetChildren()) do
-                if item:IsA("Tool") then
-                    pcall(function() item:Activate() end)
-                end
-            end
-
-            -- Fire any combat remote events in Character or ReplicatedStorage
             task.spawn(function()
                 local combatKeywords = {"punch", "attack", "hit", "damage", "swing", "slash", "combat", "melee", "slap"}
                 local function checkAndFire(inst)
@@ -862,7 +853,7 @@ local function performSuperPunch()
                 for _, inst in pairs(rep:GetDescendants()) do checkAndFire(inst) end
             end)
 
-            -- D. COLLISION ISOLATION (ZERO GROUND COLLISION TO PREVENT GROUND DAMAGE)
+            -- D. SOLID HRP COLLISION (Transfers torque impulse to target) while keeping limbs CanTouch=false
             local origCanTouch = {}
             for _, p in pairs(char:GetDescendants()) do
                 if p:IsA("BasePart") then
@@ -875,27 +866,31 @@ local function performSuperPunch()
                 end
             end
 
-            -- Continuous noclip during strike: prevents colliding with the ground/map
+            -- Stepped collision: HRP CanCollide=true for real physics launch, limbs CanCollide=false so no floor clipping
             local noclipConn = RunService.Stepped:Connect(function()
                 if char and char.Parent then
                     for _, p in pairs(char:GetDescendants()) do
                         if p:IsA("BasePart") then
-                            p.CanCollide = false
+                            if p == hrp then
+                                p.CanCollide = true
+                            else
+                                p.CanCollide = false
+                            end
                         end
                     end
                 end
             end)
 
-            -- E. ROTATIONAL TORQUE LAUNCH ENGINE (High angular velocity = massive fling without triggering linear velocity anti-cheat)
+            -- E. ROTATIONAL TORQUE ENGINE (24,000 angular velocity = massive fling on contact)
             local bav = Instance.new("BodyAngularVelocity")
             bav.Name = "TuxPunchTorque"
             bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-            bav.AngularVelocity = Vector3.new(0, 16000, 0)
+            bav.AngularVelocity = Vector3.new(0, 24000, 0)
             bav.P = math.huge
             bav.Parent = hrp
 
-            -- F. ORBITAL ATTACK LOOP (Elevated above target, never touches the floor!)
-            local strikeDuration = 0.25
+            -- F. RAPID-FIRE COMBO ATTACK LOOP (Glued to moving target, activates tools every frame)
+            local strikeDuration = 0.35
             local strikeStart = tick()
 
             while tick() - strikeStart < strikeDuration do
@@ -906,17 +901,45 @@ local function performSuperPunch()
                 local tPos = targetPart.Position
                 local tVel = targetPart.AssemblyLinearVelocity
 
-                -- Anticipate target movement
-                local lead = (tVel.Magnitude > 1) and (tVel * 0.035) or Vector3.zero
-                local elevatedPos = tPos + lead + Vector3.new(0, 0.7, 0)
+                -- Direct real-time intercept: sticks directly to the moving target
+                local lead = (tVel.Magnitude > 0.5) and (tVel.Unit * 0.45) or Vector3.zero
+                local attackPos = tPos + lead + Vector3.new(0, 0.8, 0)
 
-                -- Fast spinning strike around target's chest
-                local angle = (tick() * 32) % (math.pi * 2)
-                local offset = Vector3.new(math.cos(angle) * 1.2, 0, math.sin(angle) * 1.2)
-                hrp.CFrame = CFrame.new(elevatedPos + offset, elevatedPos)
+                hrp.CFrame = CFrame.new(attackPos) * CFrame.Angles(0, math.rad(tick() * 3600 % 360), 0)
 
-                -- Controlled impulse: launches target without exceeding server anti-cheat limits
-                hrp.AssemblyLinearVelocity = punchDir * 80 + Vector3.new(0, 50, 0)
+                -- Ram velocity towards target direction
+                local curPunchDir = (tPos - homeCF.Position).Unit
+                if curPunchDir.Magnitude < 0.1 then curPunchDir = homeCF.LookVector end
+                hrp.AssemblyLinearVelocity = curPunchDir * 160 + Vector3.new(0, 80, 0)
+
+                -- Rapid-fire tool activation every frame for maximum damage!
+                for _, item in pairs(char:GetChildren()) do
+                    if item:IsA("Tool") then
+                        pcall(function() item:Activate() end)
+                    end
+                end
+
+                -- Exploit touch interest if supported by executor for guaranteed damage
+                pcall(function()
+                    if firetouchinterest then
+                        local tool = char:FindFirstChildOfClass("Tool")
+                        local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart"))
+                        local rHand = char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm")
+                        if handle then
+                            firetouchinterest(handle, targetPart, 0)
+                            firetouchinterest(handle, targetPart, 1)
+                        end
+                        if rHand then
+                            firetouchinterest(rHand, targetPart, 0)
+                            firetouchinterest(rHand, targetPart, 1)
+                        end
+                    end
+                end)
+
+                -- If target gets blasted into orbit, break early
+                if tVel.Magnitude > 180 then
+                    break
+                end
 
                 RunService.Heartbeat:Wait()
             end
@@ -940,7 +963,7 @@ local function performSuperPunch()
                 end
             end
 
-            -- Completely zero velocities BEFORE teleporting back
+            -- Zero velocities BEFORE teleporting back
             hrp.AssemblyLinearVelocity = Vector3.zero
             hrp.AssemblyAngularVelocity = Vector3.zero
 
@@ -1065,10 +1088,11 @@ end))
 local petModel = nil
 local petLoopConn = nil
 local petClickConns = {}
+local petCharAddedConn = nil
 
 local function cleanupTuxPet()
     if petLoopConn then
-        petLoopConn:Disconnect()
+        pcall(function() petLoopConn:Disconnect() end)
         petLoopConn = nil
     end
     for _, c in ipairs(petClickConns) do
@@ -1076,7 +1100,7 @@ local function cleanupTuxPet()
     end
     petClickConns = {}
     if petModel then
-        petModel:Destroy()
+        pcall(function() petModel:Destroy() end)
         petModel = nil
     end
     onTuxCheer = nil
@@ -1090,10 +1114,12 @@ local function spawnSmartTuxPet()
     local playerHrp = char:FindFirstChild("HumanoidRootPart")
     if not playerHrp then return end
 
-    -- Container model
+    local cam = Workspace.CurrentCamera or Workspace
+
+    -- Container model parented to Camera (immune to workspace cleanup scripts & anticheat)
     petModel = Instance.new("Model")
     petModel.Name = "TuxSmartPet"
-    petModel.Parent = Workspace
+    petModel.Parent = cam
     registerInst(petModel)
 
     -- Invisible root
@@ -1198,7 +1224,7 @@ local function spawnSmartTuxPet()
     slideEmitter.Speed = NumberRange.new(2, 4)
     slideEmitter.SpreadAngle = Vector2.new(45, 45)
     slideEmitter.Enabled = false
-    slideEmitter.Parent = root
+    slideEmitter.Parent = bodyPart
 
     -- 11. Overhead Glassmorphic Status Badge
     local billboard = Instance.new("BillboardGui")
@@ -1207,7 +1233,7 @@ local function spawnSmartTuxPet()
     billboard.StudsOffset = Vector3.new(0, 2.35, 0)
     billboard.AlwaysOnTop = true
     billboard.MaxDistance = 55
-    billboard.Adornee = root
+    billboard.Adornee = bodyPart
     billboard.Parent = petModel
 
     local badgeFrame = Instance.new("Frame")
@@ -1246,13 +1272,13 @@ local function spawnSmartTuxPet()
     moodLbl.TextSize = 10
     moodLbl.Parent = badgeFrame
 
-    -- Click-To-Pet Interactive System (attached to both body and root for easy clicking)
+    -- Click-To-Pet Interactive System
     local isBackflipping = false
     local backflipTimer = 0
     local isCheering = false
     local cheerTimer = 0
     local lastMoveTime = tick()
-    local currentPetPos = playerHrp.Position - (playerHrp.CFrame.LookVector * 4.0) + (playerHrp.CFrame.RightVector * 2.5)
+    local currentPetPos = playerHrp.Position - (playerHrp.CFrame.LookVector * 3.8) + (playerHrp.CFrame.RightVector * 2.4)
     local walkClock = 0
     local pettedUntil = 0
 
@@ -1264,7 +1290,7 @@ local function spawnSmartTuxPet()
                 hGui.AlwaysOnTop = true
                 local randOffset = Vector3.new(math.random(-14, 14) / 10, 1.4, math.random(-14, 14) / 10)
                 hGui.StudsOffset = randOffset
-                hGui.Adornee = root
+                hGui.Adornee = bodyPart
                 hGui.Parent = petModel
 
                 local lbl = Instance.new("TextLabel")
@@ -1280,7 +1306,7 @@ local function spawnSmartTuxPet()
                     local el = tick() - startTime
                     if el >= dur or not hGui.Parent then
                         c:Disconnect()
-                        hGui:Destroy()
+                        pcall(function() hGui:Destroy() end)
                         return
                     end
                     hGui.StudsOffset = hGui.StudsOffset + Vector3.new(0, 0.055, 0)
@@ -1300,15 +1326,10 @@ local function spawnSmartTuxPet()
         end
     end
 
-    local clickDetector1 = Instance.new("ClickDetector")
-    clickDetector1.MaxActivationDistance = 32
-    clickDetector1.Parent = root
-    table.insert(petClickConns, clickDetector1.MouseClick:Connect(onPetInteract))
-
-    local clickDetector2 = Instance.new("ClickDetector")
-    clickDetector2.MaxActivationDistance = 32
-    clickDetector2.Parent = bodyPart
-    table.insert(petClickConns, clickDetector2.MouseClick:Connect(onPetInteract))
+    local clickDetector = Instance.new("ClickDetector")
+    clickDetector.MaxActivationDistance = 32
+    clickDetector.Parent = bodyPart
+    table.insert(petClickConns, clickDetector.MouseClick:Connect(onPetInteract))
 
     -- Punch Cheering Hook
     onTuxCheer = function()
@@ -1324,10 +1345,10 @@ local function spawnSmartTuxPet()
     rayParams.IgnoreWater = true
 
     local function getGroundPos(targetXZ, playerY)
-        local rayOrigin = Vector3.new(targetXZ.X, playerY + 4, targetXZ.Z)
-        local rayDir = Vector3.new(0, -25, 0)
+        local rayOrigin = Vector3.new(targetXZ.X, playerY + 5, targetXZ.Z)
+        local rayDir = Vector3.new(0, -30, 0)
         local hit = Workspace:Raycast(rayOrigin, rayDir, rayParams)
-        if hit and hit.Position then
+        if hit and hit.Position and typeof(hit.Position) == "Vector3" then
             return hit.Position.Y + 1.05
         else
             return playerY - 1.95
@@ -1372,7 +1393,7 @@ local function spawnSmartTuxPet()
         local dt = math.clamp(now - lastTick, 0, 0.1)
         lastTick = now
 
-        if not State.TuxPet or not petModel or not petModel.Parent then
+        if not State.TuxPet then
             cleanupTuxPet()
             return
         end
@@ -1382,8 +1403,8 @@ local function spawnSmartTuxPet()
         local hrp = currentChar:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
 
-        -- Target spot: behind and to the right of player
-        local targetOffset = -hrp.CFrame.LookVector * 4.0 + hrp.CFrame.RightVector * 2.5
+        -- Target spot: 3.8 studs behind and 2.4 studs to the right of player
+        local targetOffset = -hrp.CFrame.LookVector * 3.8 + hrp.CFrame.RightVector * 2.4
         local targetXZ = hrp.Position + targetOffset
         local groundY = getGroundPos(targetXZ, hrp.Position.Y)
         local targetGround = Vector3.new(targetXZ.X, groundY, targetXZ.Z)
@@ -1393,7 +1414,7 @@ local function spawnSmartTuxPet()
         local playerSpeed = hrp.AssemblyLinearVelocity.Magnitude
 
         -- If too far away (teleport / respawn), snap instantly
-        if distToPlayer > 45 then
+        if distToPlayer > 45 or distToTarget > 50 then
             currentPetPos = targetGround
         end
 
@@ -1401,17 +1422,16 @@ local function spawnSmartTuxPet()
         local lerpAlpha = math.clamp(dt * 7.5, 0, 1)
         currentPetPos = currentPetPos:Lerp(targetGround, lerpAlpha)
 
-        -- Determine look direction
-        local moveVec = (targetGround - currentPetPos)
-        local horizontalMove = Vector3.new(moveVec.X, 0, moveVec.Z)
-        local lookDir
-        if horizontalMove.Magnitude > 0.3 then
-            lookDir = horizontalMove.Unit
-        else
-            lookDir = hrp.CFrame.LookVector
-        end
+        -- Determine look angle via trigonometry (100% NaN-safe!)
+        local _, playerYaw, _ = hrp.CFrame:ToOrientation()
+        local moveDX = targetGround.X - currentPetPos.X
+        local moveDZ = targetGround.Z - currentPetPos.Z
+        local horizDist = math.sqrt(moveDX * moveDX + moveDZ * moveDZ)
 
-        local baseCF = CFrame.lookAt(currentPetPos, currentPetPos + lookDir)
+        local petYaw = playerYaw
+        if horizDist > 0.35 then
+            petYaw = math.atan2(-moveDX, -moveDZ)
+        end
 
         -- Handle Backflip Priority State
         if isBackflipping and backflipTimer > 0 then
@@ -1419,7 +1439,7 @@ local function spawnSmartTuxPet()
             local alpha = 1 - (backflipTimer / 0.65)
             local flipRot = CFrame.Angles(alpha * math.rad(-360), 0, 0)
             local jumpY = Vector3.new(0, math.sin(alpha * math.pi) * 2.5, 0)
-            local rootCF = CFrame.new(currentPetPos + jumpY) * (baseCF - baseCF.Position) * flipRot
+            local rootCF = CFrame.new(currentPetPos + jumpY) * CFrame.Angles(0, petYaw, 0) * flipRot
 
             slideEmitter.Enabled = false
             moodLbl.Text = "Mood: Loves LO! ❤️"
@@ -1444,7 +1464,7 @@ local function spawnSmartTuxPet()
             cheerTimer = cheerTimer - dt
             local cheerJump = Vector3.new(0, math.abs(math.sin(cheerTimer * 16)) * 1.6, 0)
             local cheerSpin = CFrame.Angles(0, (1.3 - cheerTimer) * math.rad(720), 0)
-            local rootCF = CFrame.new(currentPetPos + cheerJump) * (baseCF - baseCF.Position) * cheerSpin
+            local rootCF = CFrame.new(currentPetPos + cheerJump) * CFrame.Angles(0, petYaw, 0) * cheerSpin
 
             slideEmitter.Enabled = false
             moodLbl.Text = "💥 K.O.! GO LO! 🔥"
@@ -1471,7 +1491,7 @@ local function spawnSmartTuxPet()
 
             local slideTilt = CFrame.Angles(math.rad(74), 0, 0)
             local slideOffset = Vector3.new(0, -0.42, 0)
-            local rootCF = CFrame.new(currentPetPos + slideOffset) * (baseCF - baseCF.Position) * slideTilt
+            local rootCF = CFrame.new(currentPetPos + slideOffset) * CFrame.Angles(0, petYaw, 0) * slideTilt
 
             moodLbl.Text = "Mood: Belly-Sliding ❄️"
             moodLbl.TextColor3 = Color3.fromRGB(130, 215, 255)
@@ -1492,7 +1512,7 @@ local function spawnSmartTuxPet()
 
             local waddleRoll = CFrame.Angles(0, 0, math.sin(walkClock) * math.rad(14))
             local waddleBob = Vector3.new(0, math.abs(math.sin(walkClock)) * 0.16, 0)
-            local rootCF = CFrame.new(currentPetPos + waddleBob) * (baseCF - baseCF.Position) * waddleRoll
+            local rootCF = CFrame.new(currentPetPos + waddleBob) * CFrame.Angles(0, petYaw, 0) * waddleRoll
 
             local footStep = math.sin(walkClock) * math.rad(26)
             local lFoot = CFrame.Angles(footStep, 0, 0) * CFrame.new(0, math.max(0, -math.sin(walkClock) * 0.12), 0)
@@ -1521,7 +1541,7 @@ local function spawnSmartTuxPet()
             if idleDuration > 6.5 then
                 -- Sleeping Zzz
                 local sleepSway = math.sin(idleDuration * 2.2) * 0.04
-                local rootCF = CFrame.new(currentPetPos + Vector3.new(0, -0.22, 0)) * (baseCF - baseCF.Position)
+                local rootCF = CFrame.new(currentPetPos + Vector3.new(0, -0.22, 0)) * CFrame.Angles(0, petYaw, 0)
                 local headTilt = CFrame.Angles(math.rad(18 + sleepSway * 25), 0, 0)
 
                 local dots = math.floor(idleDuration % 3) + 1
@@ -1533,7 +1553,7 @@ local function spawnSmartTuxPet()
             else
                 -- Relaxed Idle
                 local idleBreath = math.sin(idleDuration * 2.5) * 0.03
-                local rootCF = CFrame.new(currentPetPos + Vector3.new(0, idleBreath, 0)) * (baseCF - baseCF.Position)
+                local rootCF = CFrame.new(currentPetPos + Vector3.new(0, idleBreath, 0)) * CFrame.Angles(0, petYaw, 0)
                 local headLook = CFrame.Angles(math.rad(-4), math.sin(idleDuration * 1.5) * math.rad(8), 0)
 
                 if now < pettedUntil then
@@ -1546,6 +1566,16 @@ local function spawnSmartTuxPet()
 
                 applyTuxPose(rootCF, headLook, CFrame.new(), CFrame.new(), CFrame.new(), CFrame.new())
             end
+        end
+    end))
+end
+
+-- Automatic respawn support so Tux never disappears upon player death/respawn
+if not petCharAddedConn then
+    petCharAddedConn = registerConn(LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(0.6)
+        if State.TuxPet then
+            spawnSmartTuxPet()
         end
     end))
 end
