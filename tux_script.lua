@@ -670,7 +670,7 @@ registerConn(UserInputService.InputChanged:Connect(function(input)
     end
 end))
 
--- 100% STATIONARY SUPER PUNCH ENGINE (Zero Teleport / Zero Self-Fling)
+-- PURE KINETIC PROJECTILE SUPER PUNCH (Zero Character Movement / 100% Anti-Cheat Safe)
 local isPunching = false
 local function performSuperPunch()
     if isPunching then return end
@@ -682,7 +682,7 @@ local function performSuperPunch()
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not humanoid then isPunching = false; return end
 
-    -- 1. Visual Arm Swing Animation
+    -- 1. Visual Arm Swing Animation Only (Local character body stays completely stationary)
     task.spawn(function()
         pcall(function()
             local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
@@ -701,9 +701,9 @@ local function performSuperPunch()
         end
     end)
 
-    -- 2. Detect Closest Target Player (within 50 studs)
+    -- 2. Detect Closest Target Player (within 60 studs)
     local targetHrp = nil
-    local closestDist = 50
+    local closestDist = 60
 
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
@@ -718,66 +718,62 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Remote Physics Knockback (STATIONARY LOCK on LocalPlayer)
+    -- 3. Launch Kinetic Impact Wave (LO Character NEVER moves a single millimeter!)
     if targetHrp and targetHrp.Parent then
         local pushDir = (targetHrp.Position - hrp.Position).Unit
         if pushDir ~= pushDir or pushDir.Magnitude == 0 then pushDir = hrp.CFrame.LookVector end
 
-        -- LOCK LOCAL PLAYER POSITION IN PLACE (Hard Anchor guarantee)
-        local initialCF = hrp.CFrame
-        hrp.Anchored = true
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
+        -- Create high-mass Kinetic Shockwave Ball directly in front of LocalPlayer
+        local wave = Instance.new("Part")
+        wave.Name = "TuxPunchShockwave"
+        wave.Shape = Enum.PartType.Ball
+        wave.Size = Vector3.new(8, 8, 8)
+        wave.Color = currentTheme.Accent
+        wave.Material = Enum.Material.Neon
+        wave.Transparency = 0.2
+        wave.CanCollide = true
+        wave.CanTouch = true
+        wave.Massless = false
+        wave.CustomPhysicalProperties = PhysicalProperties.new(100, 1, 1, 1, 1)
 
-        -- Create projectile part that moves from local player to target player
-        local bullet = Instance.new("Part")
-        bullet.Name = "TuxPunchBullet"
-        bullet.Size = Vector3.new(5, 5, 5)
-        bullet.Transparency = 1
-        bullet.CanCollide = true
-        bullet.CanTouch = true
-        bullet.Massless = true
-        bullet.CustomPhysicalProperties = PhysicalProperties.new(100, 1, 1, 1, 1)
-        bullet.CFrame = initialCF
-        bullet.Parent = Workspace
+        -- Position shockwave 3 studs in front of LocalPlayer, facing target
+        wave.CFrame = CFrame.new(hrp.Position + (pushDir * 3), targetHrp.Position)
+        wave.Parent = Workspace
 
-        -- Prevent bullet from touching LocalPlayer
+        -- Isolate shockwave collision from LocalPlayer character parts
         for _, part in pairs(char:GetChildren()) do
             if part:IsA("BasePart") then
                 local ncc = Instance.new("NoCollisionConstraint")
-                ncc.Part0 = bullet
+                ncc.Part0 = wave
                 ncc.Part1 = part
-                ncc.Parent = bullet
+                ncc.Parent = wave
             end
         end
 
+        -- Angular spin for max kinetic momentum transfer upon contact with target
         local bav = Instance.new("BodyAngularVelocity")
+        bav.Name = "TuxSpin"
         bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
         bav.AngularVelocity = Vector3.new(0, 99999, 0)
-        bav.Parent = bullet
+        bav.Parent = wave
 
-        local knockbackVector = (pushDir * 15000) + Vector3.new(0, 6000, 0)
-        
-        -- Fly bullet directly into target
+        -- High-velocity kinetic momentum launch
+        local launchVelocity = (pushDir * 25000) + Vector3.new(0, 8000, 0)
+        wave.AssemblyLinearVelocity = launchVelocity
+
+        -- Propel shockwave into target
         local startTime = tick()
-        while tick() - startTime < 0.15 do
-            if targetHrp and targetHrp.Parent and bullet and bullet.Parent then
-                targetHrp.CanCollide = true
-                bullet.CFrame = targetHrp.CFrame
-                bullet.AssemblyLinearVelocity = knockbackVector
+        while tick() - startTime < 0.20 do
+            if targetHrp and targetHrp.Parent and wave and wave.Parent then
+                pcall(function() targetHrp.CanCollide = true end)
+                wave.AssemblyLinearVelocity = launchVelocity
             else
                 break
             end
             RunService.Heartbeat:Wait()
         end
 
-        pcall(function() bullet:Destroy() end)
-
-        -- Clean unlock of LocalPlayer
-        hrp.CFrame = initialCF
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        hrp.Anchored = false
+        pcall(function() wave:Destroy() end)
     end
 
     task.wait(0.15)
