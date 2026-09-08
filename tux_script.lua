@@ -705,7 +705,7 @@ local function performSuperPunch()
         end
     end)
 
-    -- 2. Detect Closest Target Player (Extended Range: 500 studs for map-wide targeting)
+    -- 2. Detect Closest Target Player (Universal R6/R15 & Custom Avatars)
     local targetCharacter = nil
     local targetPart = nil
     local closestDist = 500
@@ -715,6 +715,7 @@ local function performSuperPunch()
             local tChar = player.Character
             local tHum = tChar:FindFirstChildOfClass("Humanoid")
             
+            -- Universal root/torso detection regardless of R6, R15, Custom rigs or packages
             local tMainPart = tChar:FindFirstChild("HumanoidRootPart")
                 or tChar:FindFirstChild("Torso")
                 or tChar:FindFirstChild("UpperTorso")
@@ -733,7 +734,7 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Stealth Safe Fling Engine (Bypasses Anti-Cheat Speed/Teleport Detectors)
+    -- 3. Robust Fling Engine with Hitbox Expansion & Motion Lead
     if targetCharacter and targetPart and targetCharacter.Parent then
         local homeCF = hrp.CFrame
 
@@ -752,11 +753,19 @@ local function performSuperPunch()
             end
         end))
 
-        -- Standard safe physics forces (Avoids 9999999 trigger limits)
+        -- Temporary Hitbox Expansion on target for 100% collision delivery
+        local origTargetSize = targetPart.Size
+        local origTargetCanCollide = targetPart.CanCollide
+        pcall(function()
+            targetPart.Size = Vector3.new(12, 12, 12)
+            targetPart.CanCollide = true
+        end)
+
+        -- High Torque Rotational Force (Kept within Anti-Cheat thresholds)
         local bav = Instance.new("BodyAngularVelocity")
         bav.Name = "TuxPunchSpin"
-        bav.MaxTorque = Vector3.new(0, math.huge, 0) -- Y-axis spin only (natural look to server)
-        bav.AngularVelocity = Vector3.new(0, 9500, 0)
+        bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bav.AngularVelocity = Vector3.new(0, 15000, 0)
         bav.Parent = hrp
 
         local bvl = Instance.new("BodyVelocity")
@@ -765,8 +774,7 @@ local function performSuperPunch()
         bvl.Velocity = Vector3.new(0, 0, 0)
         bvl.Parent = hrp
 
-        -- High frequency position glue without extreme teleport values
-        local duration = 0.4
+        local duration = 0.45
         local startTime = tick()
 
         while tick() - startTime < duration do
@@ -774,17 +782,32 @@ local function performSuperPunch()
                 break
             end
 
+            -- Ensure target parts allow collision contact
+            pcall(function()
+                for _, p in pairs(targetCharacter:GetChildren()) do
+                    if p:IsA("BasePart") then
+                        p.CanCollide = true
+                    end
+                end
+            end)
+
             local tPos = targetPart.Position
             local tVel = targetPart.AssemblyLinearVelocity
+            local tHum = targetCharacter:FindFirstChildOfClass("Humanoid")
 
-            -- Soft lead prediction
-            local targetDest = tPos + (tVel * 0.08)
+            -- Motion prediction: combine AssemblyLinearVelocity and MoveDirection for walking/running targets
+            local moveVector = tVel
+            if tHum and tHum.MoveDirection.Magnitude > 0 then
+                moveVector = moveVector + (tHum.MoveDirection * (tHum.WalkSpeed or 16))
+            end
 
-            -- Keep HRP locked precisely onto target root part to transfer momentum via Roblox character physics collision
-            hrp.CFrame = CFrame.new(targetDest) * CFrame.Angles(0, math.rad(math.random(-180, 180)), 0)
-            bvl.Velocity = (tVel.Magnitude > 2) and tVel or Vector3.new(math.random(-50, 50), 0, math.random(-50, 50))
+            local predictedPos = tPos + (moveVector * 0.1)
 
-            if tVel.Magnitude > 80 then
+            -- Magnetize onto predicted position with high spin collision
+            hrp.CFrame = CFrame.new(predictedPos) * CFrame.Angles(0, math.rad(math.random(-180, 180)), 0)
+            bvl.Velocity = moveVector * 1.5 + Vector3.new(math.random(-20, 20), 0, math.random(-20, 20))
+
+            if tVel.Magnitude > 75 then
                 break
             end
 
@@ -794,6 +817,14 @@ local function performSuperPunch()
         -- Clean up body forces
         bav:Destroy()
         bvl:Destroy()
+
+        -- Restore original target size/collision
+        pcall(function()
+            if targetPart and targetPart.Parent then
+                targetPart.Size = origTargetSize
+                targetPart.CanCollide = origTargetCanCollide
+            end
+        end)
 
         -- Safe Return Home & Instant Reset
         healthLock:Disconnect()
@@ -822,7 +853,7 @@ addModuleToggle(rageScroll, "Super Punch 🥊", false, function(enabled)
     PunchActionGui.Enabled = enabled
 end)
 
--- Hitbox Expander
+-- Hitbox Expander (Supports custom avatars, R6, R15, and custom meshes)
 addModuleToggle(rageScroll, "Hitbox Expander 📦", false, function(enabled)
     State.HitboxEnabled = enabled
 end)
@@ -834,13 +865,18 @@ registerConn(RunService.RenderStepped:Connect(function()
     if State.HitboxEnabled then
         for _, player in pairs(Players:GetPlayers()) do
             if player ~= LocalPlayer and player.Character then
-                local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    hrp.Size = Vector3.new(State.HitboxSize, State.HitboxSize, State.HitboxSize)
-                    hrp.Transparency = 0.7
-                    hrp.Color = currentTheme.Accent
-                    hrp.Material = Enum.Material.ForceField
-                    hrp.CanCollide = false
+                local tChar = player.Character
+                local targetP = tChar:FindFirstChild("HumanoidRootPart")
+                    or tChar:FindFirstChild("Torso")
+                    or tChar:FindFirstChild("UpperTorso")
+                    or tChar:FindFirstChildOfClass("BasePart")
+
+                if targetP then
+                    targetP.Size = Vector3.new(State.HitboxSize, State.HitboxSize, State.HitboxSize)
+                    targetP.Transparency = 0.7
+                    targetP.Color = currentTheme.Accent
+                    targetP.Material = Enum.Material.ForceField
+                    targetP.CanCollide = false
                 end
             end
         end
