@@ -670,7 +670,7 @@ registerConn(UserInputService.InputChanged:Connect(function(input)
     end
 end))
 
--- Protected Workspace Proxy Fling (Local Player Stays Safe & Unmoved!)
+-- Authentic Replicated Fling Engine with Anchor Anti-Self-Fling Protection
 local isPunching = false
 local function performSuperPunch()
     if isPunching then return end
@@ -682,7 +682,7 @@ local function performSuperPunch()
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not humanoid then isPunching = false; return end
 
-    -- Visual Arm Swing
+    -- 1. Visual Arm Swing Animation
     task.spawn(function()
         pcall(function()
             local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
@@ -701,9 +701,10 @@ local function performSuperPunch()
         end
     end)
 
-    -- Closest Target Detection
+    -- 2. Detect Closest Target Player
     local targetHrp = nil
     local closestDist = 50
+
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local tHrp = player.Character:FindFirstChild("HumanoidRootPart")
@@ -717,55 +718,61 @@ local function performSuperPunch()
         end
     end
 
-    -- Execute Workspace Proxy Part Fling
+    -- 3. Execute Replicated Physics Fling
     if targetHrp then
+        local oldCF = hrp.CFrame
         local pushDir = (targetHrp.Position - hrp.Position).Unit
         if pushDir ~= pushDir then pushDir = hrp.CFrame.LookVector end
 
-        -- Spawn Proxy Part in Workspace so it NEVER exerts recoil force on LocalPlayer
-        local flingPart = Instance.new("Part")
-        flingPart.Name = "TuxFlingProxy"
-        flingPart.Size = Vector3.new(5, 5, 5)
-        flingPart.Transparency = 1
-        flingPart.CanCollide = true
-        flingPart.CanTouch = true
-        flingPart.Massless = false
-        flingPart.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 100, 100, 100)
-        flingPart.CFrame = targetHrp.CFrame
-        flingPart.Parent = Workspace
+        -- Enable PlatformStand to prevent tripping
+        humanoid.PlatformStand = true
 
-        -- Isolate from Local Player Parts
-        for _, part in pairs(char:GetDescendants()) do
+        -- Disable CanCollide on all body parts EXCEPT HumanoidRootPart
+        for _, part in pairs(char:GetChildren()) do
             if part:IsA("BasePart") then
-                local ncc = Instance.new("NoCollisionConstraint")
-                ncc.Part0 = flingPart
-                ncc.Part1 = part
-                ncc.Parent = flingPart
+                part.CanCollide = (part.Name == "HumanoidRootPart")
             end
         end
 
+        -- Spin Force on RootPart
         local bav = Instance.new("BodyAngularVelocity")
+        bav.Name = "TuxFlingSpin"
         bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bav.AngularVelocity = Vector3.new(99999, 99999, 99999)
-        bav.Parent = flingPart
+        bav.AngularVelocity = Vector3.new(0, 999999, 0)
+        bav.Parent = hrp
 
-        local bv = Instance.new("BodyVelocity")
-        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bv.Velocity = (pushDir * 6000) + Vector3.new(0, 2500, 0)
-        bv.Parent = flingPart
-
+        -- Fling Phase (0.22 seconds contact with target)
         local startTime = tick()
-        local angle = 0
-        while tick() - startTime < 0.25 do
-            angle = angle + 120
+        while tick() - startTime < 0.22 do
             if targetHrp and targetHrp.Parent then
-                flingPart.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(angle), 0)
-                flingPart.AssemblyLinearVelocity = (pushDir * 6000) + Vector3.new(0, 2500, 0)
+                hrp.CFrame = targetHrp.CFrame
+                hrp.AssemblyLinearVelocity = (pushDir * 6000) + Vector3.new(0, 2500, 0)
             end
             RunService.Heartbeat:Wait()
         end
 
-        flingPart:Destroy()
+        -- Remove Spin Force
+        bav:Destroy()
+
+        -- ZERO OUT ALL VELOCITIES & ANCHOR FOR 1 FRAME (Prevents Local Player Fling!)
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        hrp.CFrame = oldCF
+        hrp.Anchored = true
+
+        -- Wait 1 frame while anchored so Roblox clears physics momentum
+        RunService.Heartbeat:Wait()
+
+        -- Unanchor & Restore Normal State
+        hrp.Anchored = false
+        humanoid.PlatformStand = false
+
+        -- Restore Body Collisions
+        for _, part in pairs(char:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
     end
 
     task.wait(0.15)
