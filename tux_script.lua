@@ -385,9 +385,9 @@ SettingsPadding.Parent = SettingsPanel
 -- Mode Buttons in Settings Panel
 local modesList = {
     {id = "Combined", label = "Mode: 3-in-1 Combined 🔥"},
-    {id = "Impulser", label = "Mode 1: Block Impulse 📦"},
-    {id = "Spin", label = "Mode 2: Ghost Proxy Spin 🌀"},
-    {id = "Direct", label = "Mode 3: Touch Impulse Surge ⚡"}
+    {id = "Impulser", label = "Mode 1: Rotor Spin Fling 🌀"},
+    {id = "Spin", label = "Mode 2: Angular Sweep Fling ⚡"},
+    {id = "Direct", label = "Mode 3: Linear Push Dash 💨"}
 }
 
 local modeButtons = {}
@@ -436,7 +436,7 @@ SettingsArrowBtn.MouseButton1Click:Connect(function()
 end)
 
 ---------------------------------------------------------
--- SAFE TARGET-ONLY FLING EXECUTION (LocalPlayer Stays Safe!)
+-- REAL INFINITE YIELD STYLE FLING (Target Launched, You Safe!)
 ---------------------------------------------------------
 local isPunching = false
 local function performSuperPunch()
@@ -449,7 +449,7 @@ local function performSuperPunch()
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not humanoid then isPunching = false; return end
 
-    -- 1. Visual Punch Swing (Local Player Arm Rotation Only)
+    -- 1. Visual Arm Swing Animation
     task.spawn(function()
         pcall(function()
             local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
@@ -485,88 +485,113 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Fling directly ON TARGET (LocalPlayer stays completely untouched!)
+    -- 3. Execute Real Client-Side Fling
     if targetHrp then
+        local origCF = hrp.CFrame
         local pushDir = (targetHrp.Position - hrp.Position).Unit
         if pushDir ~= pushDir then pushDir = hrp.CFrame.LookVector end
         local mode = State.PunchMode
 
-        -- MODE 1: Heavy Impulser Block (Proxy Physics Part)
-        if mode == "Impulser" or mode == "Combined" then
-            task.spawn(function()
-                local b = Instance.new("Part")
-                b.Size = Vector3.new(7, 7, 7)
-                b.Transparency = 1
-                b.CanCollide = true
-                b.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 100, 100, 100)
-                b.CFrame = targetHrp.CFrame
-                b.Parent = Workspace
+        -- Save & Protect Local Player from Death / Tripping
+        local origDeadState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+        humanoid.PlatformStand = true
 
-                local bav = Instance.new("BodyAngularVelocity")
-                bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                bav.AngularVelocity = Vector3.new(99999, 99999, 99999)
-                bav.Parent = b
-
-                local bv = Instance.new("BodyVelocity")
-                bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                bv.Velocity = (pushDir * 8000) + Vector3.new(0, 3500, 0)
-                bv.Parent = b
-
-                task.wait(0.22)
-                b:Destroy()
-            end)
-        end
-
-        -- MODE 2: Ghost Proxy Spin (Proxy Block Orbiting Target)
-        if mode == "Spin" or mode == "Combined" then
-            task.spawn(function()
-                local ghostPart = Instance.new("Part")
-                ghostPart.Size = Vector3.new(6, 6, 6)
-                ghostPart.Transparency = 1
-                ghostPart.CanCollide = true
-                ghostPart.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 100, 100, 100)
-                ghostPart.Parent = Workspace
-
-                local bav = Instance.new("BodyAngularVelocity")
-                bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-                bav.AngularVelocity = Vector3.new(0, 999999, 0)
-                bav.Parent = ghostPart
-
-                local startTime = tick()
-                local stepAngle = 0
-                while tick() - startTime < 0.22 do
-                    stepAngle = stepAngle + 120
-                    if targetHrp and targetHrp.Parent then
-                        ghostPart.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(stepAngle), 0)
-                        ghostPart.AssemblyLinearVelocity = (pushDir * 7000) + Vector3.new(0, 3000, 0)
-                    end
-                    RunService.Heartbeat:Wait()
+        -- Disable limb collisions so limbs don't explode/trip, keep collision ONLY on RootPart
+        for _, part in pairs(char:GetChildren()) do
+            if part:IsA("BasePart") then
+                if part.Name == "HumanoidRootPart" then
+                    part.CanCollide = true
+                else
+                    part.CanCollide = false
                 end
-                ghostPart:Destroy()
-            end)
+            end
         end
 
-        -- MODE 3: Touch Impulse Surge
-        if mode == "Direct" or mode == "Combined" then
-            task.spawn(function()
-                local touchPart = Instance.new("Part")
-                touchPart.Size = Vector3.new(8, 8, 8)
-                touchPart.Transparency = 1
-                touchPart.CanCollide = true
-                touchPart.CFrame = targetHrp.CFrame
-                touchPart.Parent = Workspace
+        if mode == "Impulser" then
+            -- Mode 1: Rotor Spin Fling (Infinite Yield Standard)
+            local bav = Instance.new("BodyAngularVelocity")
+            bav.Name = "TuxRotorFling"
+            bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            bav.AngularVelocity = Vector3.new(0, 999999, 0)
+            bav.Parent = hrp
 
-                pcall(function()
-                    if firetouchinterest then
-                        firetouchinterest(touchPart, targetHrp, 0)
-                        firetouchinterest(touchPart, targetHrp, 1)
-                    end
-                    targetHrp.AssemblyLinearVelocity = (pushDir * 8000) + Vector3.new(0, 3500, 0)
-                    targetHrp.AssemblyAngularVelocity = Vector3.new(99999, 99999, 99999)
-                end)
-                task.wait(0.2)
-                touchPart:Destroy()
-            end)
+            local startTime = tick()
+            while tick() - startTime < 0.25 do
+                if targetHrp and targetHrp.Parent then
+                    hrp.CFrame = targetHrp.CFrame * CFrame.new(0, 0, 0)
+                    hrp.AssemblyLinearVelocity = Vector3.new(9999, 9999, 9999)
+                end
+                RunService.Heartbeat:Wait()
+            end
+            bav:Destroy()
+
+        elseif mode == "Spin" then
+            -- Mode 2: Angular Sweep Fling
+            local bav = Instance.new("BodyAngularVelocity")
+            bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            bav.AngularVelocity = Vector3.new(999999, 999999, 999999)
+            bav.Parent = hrp
+
+            local startTime = tick()
+            local angle = 0
+            while tick() - startTime < 0.25 do
+                angle = angle + 90
+                if targetHrp and targetHrp.Parent then
+                    hrp.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(angle), 0) * CFrame.new(0, 0, 0.5)
+                end
+                RunService.Heartbeat:Wait()
+            end
+            bav:Destroy()
+
+        elseif mode == "Direct" then
+            -- Mode 3: Linear Push Dash
+            local bv = Instance.new("BodyVelocity")
+            bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bv.Velocity = (pushDir * 5000) + Vector3.new(0, 2500, 0)
+            bv.Parent = hrp
+
+            local startTime = tick()
+            while tick() - startTime < 0.2 do
+                if targetHrp and targetHrp.Parent then
+                    hrp.CFrame = targetHrp.CFrame
+                end
+                RunService.Heartbeat:Wait()
+            end
+            bv:Destroy()
+
+        else -- Mode: Combined (3-in-1)
+            local bav = Instance.new("BodyAngularVelocity")
+            bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            bav.AngularVelocity = Vector3.new(999999, 999999, 999999)
+            bav.Parent = hrp
+
+            local startTime = tick()
+            local angle = 0
+            while tick() - startTime < 0.25 do
+                angle = angle + 120
+                if targetHrp and targetHrp.Parent then
+                    hrp.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(angle), 0)
+                    hrp.AssemblyLinearVelocity = (pushDir * 5000) + Vector3.new(0, 2500, 0)
+                end
+                RunService.Heartbeat:Wait()
+            end
+            bav:Destroy()
+        end
+
+        -- Restoration & Safety Reset
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        hrp.CFrame = origCF
+
+        humanoid.PlatformStand = false
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, origDeadState)
+
+        -- Restore Limb Collisions
+        for _, part in pairs(char:GetChildren()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
         end
     end
 
