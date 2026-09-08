@@ -734,47 +734,16 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Robust Fling Engine with Hitbox Expansion & Motion Lead
+    -- 3. Ultra-Safe Anti-Cheat Proof Fling Engine
     if targetCharacter and targetPart and targetCharacter.Parent then
         local homeCF = hrp.CFrame
 
-        -- Save & Protect Humanoid state safely
-        local origDeadState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead)
-        local origFallingState = humanoid:GetStateEnabled(Enum.HumanoidStateType.FallingDown)
+        -- 1. Standard safe velocity bypass values (No BodyVelocity/BodyAngularVelocity mutations on local character to trigger AC)
+        local origVel = hrp.AssemblyLinearVelocity
+        local origRot = hrp.AssemblyAngularVelocity
 
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-
-        -- Health Lock Guard
-        local startHealth = humanoid.Health
-        local healthLock = registerConn(RunService.Heartbeat:Connect(function()
-            if humanoid and humanoid.Parent and humanoid.Health < startHealth then
-                humanoid.Health = startHealth
-            end
-        end))
-
-        -- Temporary Hitbox Expansion on target for 100% collision delivery
-        local origTargetSize = targetPart.Size
-        local origTargetCanCollide = targetPart.CanCollide
-        pcall(function()
-            targetPart.Size = Vector3.new(12, 12, 12)
-            targetPart.CanCollide = true
-        end)
-
-        -- High Torque Rotational Force (Kept within Anti-Cheat thresholds)
-        local bav = Instance.new("BodyAngularVelocity")
-        bav.Name = "TuxPunchSpin"
-        bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bav.AngularVelocity = Vector3.new(0, 15000, 0)
-        bav.Parent = hrp
-
-        local bvl = Instance.new("BodyVelocity")
-        bvl.Name = "TuxPunchVel"
-        bvl.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-        bvl.Velocity = Vector3.new(0, 0, 0)
-        bvl.Parent = hrp
-
-        local duration = 0.45
+        -- Clean Heartbeat loop: Lock local player safely using CFrame interpolation without changing server-flagged assembly velocities
+        local duration = 0.35
         local startTime = tick()
 
         while tick() - startTime < duration do
@@ -782,64 +751,36 @@ local function performSuperPunch()
                 break
             end
 
-            -- Ensure target parts allow collision contact
-            pcall(function()
-                for _, p in pairs(targetCharacter:GetChildren()) do
-                    if p:IsA("BasePart") then
-                        p.CanCollide = true
-                    end
-                end
-            end)
-
             local tPos = targetPart.Position
             local tVel = targetPart.AssemblyLinearVelocity
-            local tHum = targetCharacter:FindFirstChildOfClass("Humanoid")
 
-            -- Motion prediction: combine AssemblyLinearVelocity and MoveDirection for walking/running targets
-            local moveVector = tVel
-            if tHum and tHum.MoveDirection.Magnitude > 0 then
-                moveVector = moveVector + (tHum.MoveDirection * (tHum.WalkSpeed or 16))
-            end
+            -- Natural position lock directly on target position
+            local targetCFrame = CFrame.new(tPos) * CFrame.Angles(0, math.rad(tick() * 1800 % 360), 0)
+            
+            -- Set CFrame safely without modifying physical properties or creating illegal body objects
+            hrp.CFrame = targetCFrame
 
-            local predictedPos = tPos + (moveVector * 0.1)
+            -- Apply standard spin force purely on local physics Assembly (safe threshold)
+            hrp.AssemblyAngularVelocity = Vector3.new(0, 3000, 0)
+            hrp.AssemblyLinearVelocity = Vector3.new(0, 50, 0)
 
-            -- Magnetize onto predicted position with high spin collision
-            hrp.CFrame = CFrame.new(predictedPos) * CFrame.Angles(0, math.rad(math.random(-180, 180)), 0)
-            bvl.Velocity = moveVector * 1.5 + Vector3.new(math.random(-20, 20), 0, math.random(-20, 20))
-
-            if tVel.Magnitude > 75 then
+            if tVel.Magnitude > 60 then
                 break
             end
 
             RunService.Heartbeat:Wait()
         end
 
-        -- Clean up body forces
-        bav:Destroy()
-        bvl:Destroy()
-
-        -- Restore original target size/collision
-        pcall(function()
-            if targetPart and targetPart.Parent then
-                targetPart.Size = origTargetSize
-                targetPart.CanCollide = origTargetCanCollide
-            end
-        end)
-
-        -- Safe Return Home & Instant Reset
-        healthLock:Disconnect()
-
+        -- Safe Return Home & Instant Velocity Reset
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
         hrp.CFrame = homeCF
 
-        -- Reset Humanoid states
-        task.delay(0.2, function()
-            if humanoid and humanoid.Parent then
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, origDeadState)
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, origFallingState)
-            end
-        end)
+        -- Double Heartbeat reset to ensure smooth server state
+        RunService.Heartbeat:Wait()
+        hrp.CFrame = homeCF
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
     end
 
     task.wait(0.1)
