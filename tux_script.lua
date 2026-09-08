@@ -705,40 +705,65 @@ local function performSuperPunch()
         end
     end)
 
-    -- 2. Detect Closest Target Player (Universal R6/R15 & Custom Avatars)
+    -- 2. Detect Target Player (Aim-First Mouse Target + Universal Avatar Scanner)
     local targetCharacter = nil
     local targetPart = nil
     local closestDist = 500
 
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
-            local tChar = player.Character
-            local tHum = tChar:FindFirstChildOfClass("Humanoid")
-            
-            -- Universal root/torso detection regardless of R6, R15, Custom rigs or packages
-            local tMainPart = tChar:FindFirstChild("HumanoidRootPart")
-                or tChar:FindFirstChild("Torso")
-                or tChar:FindFirstChild("UpperTorso")
-                or tChar:FindFirstChild("LowerTorso")
-                or tChar:FindFirstChild("Head")
-                or tChar:FindFirstChildOfClass("BasePart")
+    -- Universal rig part detector (R6, R15, custom skins, bundles, mesh rigs)
+    local function getTargetRoot(character)
+        if not character then return nil end
+        return character:FindFirstChild("HumanoidRootPart")
+            or character:FindFirstChild("UpperTorso")
+            or character:FindFirstChild("Torso")
+            or character:FindFirstChild("LowerTorso")
+            or character:FindFirstChild("Head")
+            or (character.PrimaryPart and character.PrimaryPart:IsA("BasePart") and character.PrimaryPart)
+            or character:FindFirstChildWhichIsA("BasePart")
+    end
 
-            if tMainPart and (not tHum or tHum.Health > 0) then
-                local dist = (tMainPart.Position - hrp.Position).Magnitude
-                if dist < closestDist then
-                    closestDist = dist
-                    targetCharacter = tChar
-                    targetPart = tMainPart
+    -- Priority 1: Aiming directly at a player with Mouse
+    if Mouse.Target then
+        local mChar = Mouse.Target.Parent
+        if mChar and not mChar:FindFirstChildOfClass("Humanoid") and mChar.Parent then
+            mChar = mChar.Parent
+        end
+        local mPlayer = Players:GetPlayerFromCharacter(mChar)
+        if mPlayer and mPlayer ~= LocalPlayer and mChar then
+            local mHum = mChar:FindFirstChildOfClass("Humanoid")
+            local mRoot = getTargetRoot(mChar)
+            if mRoot and (not mHum or mHum.Health > 0) then
+                targetCharacter = mChar
+                targetPart = mRoot
+            end
+        end
+    end
+
+    -- Priority 2: Closest Player within range
+    if not targetCharacter then
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local tChar = player.Character
+                local tHum = tChar:FindFirstChildOfClass("Humanoid")
+                local tMainPart = getTargetRoot(tChar)
+
+                if tMainPart and (not tHum or tHum.Health > 0) then
+                    local dist = (tMainPart.Position - hrp.Position).Magnitude
+                    if dist < closestDist then
+                        closestDist = dist
+                        targetCharacter = tChar
+                        targetPart = tMainPart
+                    end
                 end
             end
         end
     end
 
-    -- 3. Robust Fling Engine with Hitbox Expansion & Motion Lead (Fall Damage Protected)
+    -- 3. True Skid Fling Engine (100% Anti-Death, Infinite Mass, Direct Lock)
     if targetCharacter and targetPart and targetCharacter.Parent then
         local homeCF = hrp.CFrame
 
-        -- Save & Protect Humanoid state safely (Bypasses Fall Damage / Touch Damage)
+        -- Save & Protect Humanoid states
         local origDeadState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead)
         local origFallingState = humanoid:GetStateEnabled(Enum.HumanoidStateType.FallingDown)
         local origRagdollState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Ragdoll)
@@ -750,38 +775,48 @@ local function performSuperPunch()
         humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
         humanoid.PlatformStand = true
 
-        -- Active Health Lock & Touch Damage Invulnerability Guard
-        local startHealth = humanoid.Health
-        local healthLock = registerConn(RunService.Heartbeat:Connect(function()
-            if humanoid and humanoid.Parent then
-                if humanoid.Health < startHealth then
-                    humanoid.Health = startHealth
+        -- Disable common in-game fall damage & touch damage localscripts
+        for _, scriptName in ipairs({"FallDamage", "FallDamageScript", "Fall_Damage", "FallDamage_Client", "RagdollClient", "TouchDamage"}) do
+            pcall(function()
+                local s = char:FindFirstChild(scriptName) or (LocalPlayer:FindFirstChild("PlayerScripts") and LocalPlayer.PlayerScripts:FindFirstChild(scriptName))
+                if s and s:IsA("LocalScript") then
+                    s.Disabled = true
+                end
+            end)
+        end
+
+        -- Maximize Density (Infinite Mass = Maximum Transfer of Kinetic Momentum)
+        local origProperties = {}
+        for _, p in pairs(char:GetDescendants()) do
+            if p:IsA("BasePart") then
+                origProperties[p] = p.CustomPhysicalProperties
+                pcall(function()
+                    p.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5)
+                end)
+            end
+        end
+
+        -- Active Stepped NoClip: Absolutely NEVER collide with the ground or terrain!
+        local noclipConn = RunService.Stepped:Connect(function()
+            if char and char.Parent then
+                for _, p in pairs(char:GetDescendants()) do
+                    if p:IsA("BasePart") and p ~= hrp then
+                        p.CanCollide = false
+                    end
                 end
             end
-        end))
-
-        -- Temporary Hitbox Expansion on target for 100% collision delivery
-        local origTargetSize = targetPart.Size
-        local origTargetCanCollide = targetPart.CanCollide
-        pcall(function()
-            targetPart.Size = Vector3.new(10, 10, 10)
-            targetPart.CanCollide = true
         end)
 
-        -- Rotational Torque Force
+        -- High-torque horizontal spin (Bypasses Linear AC filters and avoids pitching into the floor)
         local bav = Instance.new("BodyAngularVelocity")
-        bav.Name = "TuxPunchSpin"
-        bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bav.AngularVelocity = Vector3.new(0, 12000, 0)
+        bav.Name = "TuxPunchBAM"
+        bav.MaxTorque = Vector3.new(0, math.huge, 0)
+        bav.AngularVelocity = Vector3.new(0, 95000, 0)
+        bav.P = math.huge
         bav.Parent = hrp
 
-        local bvl = Instance.new("BodyVelocity")
-        bvl.Name = "TuxPunchVel"
-        bvl.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-        bvl.Velocity = Vector3.new(0, 0, 0)
-        bvl.Parent = hrp
-
-        local duration = 0.45
+        -- High-frequency direct lock loop
+        local duration = 0.4
         local startTime = tick()
 
         while tick() - startTime < duration do
@@ -791,51 +826,45 @@ local function performSuperPunch()
 
             local tPos = targetPart.Position
             local tVel = targetPart.AssemblyLinearVelocity
-            local tHum = targetCharacter:FindFirstChildOfClass("Humanoid")
 
-            -- Motion prediction
-            local moveVector = tVel
-            if tHum and tHum.MoveDirection.Magnitude > 0 then
-                moveVector = moveVector + (tHum.MoveDirection * (tHum.WalkSpeed or 16))
-            end
+            -- Direct center penetration with micro-oscillation (Forces physics solver to resolve collision violently)
+            local safeY = math.max(tPos.Y, 2.5)
+            local cycle = (tick() % 0.1 > 0.05) and 0.15 or -0.15
+            local targetCFrame = CFrame.new(tPos.X, safeY + cycle, tPos.Z) * CFrame.Angles(0, math.rad(tick() * 2000 % 360), 0)
 
-            -- Float 1.5 studs ABOVE the target's center so HRP never hits the ground mesh directly!
-            local predictedPos = tPos + (moveVector * 0.1) + Vector3.new(0, 1.5, 0)
+            hrp.CFrame = targetCFrame
 
-            -- Keep local character slightly elevated above floor
-            hrp.CFrame = CFrame.new(predictedPos) * CFrame.Angles(0, math.rad(math.random(-180, 180)), 0)
-            bvl.Velocity = moveVector * 1.2
-
-            -- Protect local humanoid from taking physics fall impact
-            humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
-
-            if tVel.Magnitude > 75 then
+            -- Launch confirmation: Target is blown away!
+            if tVel.Magnitude > 220 then
                 break
             end
 
             RunService.Heartbeat:Wait()
         end
 
-        -- Clean up body forces
+        -- Clean up body forces & NoClip connection
         bav:Destroy()
-        bvl:Destroy()
+        noclipConn:Disconnect()
 
-        -- Restore original target size/collision
-        pcall(function()
-            if targetPart and targetPart.Parent then
-                targetPart.Size = origTargetSize
-                targetPart.CanCollide = origTargetCanCollide
+        -- Restore physical properties
+        for p, prop in pairs(origProperties) do
+            if p and p.Parent then
+                pcall(function() p.CustomPhysicalProperties = prop end)
             end
-        end)
+        end
 
-        -- Safe Return Home & Restore States
-        healthLock:Disconnect()
-
+        -- Safe Return Home & Velocity Nullification
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
         hrp.CFrame = homeCF
-        humanoid.PlatformStand = false
 
+        RunService.Heartbeat:Wait()
+        humanoid.PlatformStand = false
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        hrp.CFrame = homeCF
+
+        -- Restore Humanoid states after brief delay
         task.delay(0.2, function()
             if humanoid and humanoid.Parent then
                 humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, origDeadState)
