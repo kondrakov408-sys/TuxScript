@@ -1,25 +1,116 @@
--- Tux Script 🐧 | Roblox GUI Script
--- Theme: Linux Mascot Tux (Dark Navy, Penguin Yellow, Clean White)
+-- Tux Script 🐧 | Minecraft-Style Roblox Exploit GUI
+-- Themes: Dark Glass, Neon Accents, Minecraft Cheat Columns (Celestial/Neverhook Style)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
 local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
 
--- State Management
-local State = {
-    NoClip = false,
-    ESP = false,
-    Fly = false,
-    FlySpeed = 60,
-    PunchEnabled = false,
-    PunchMode = "Combined" -- Options: "Impulser", "Spin", "Direct", "Combined"
+---------------------------------------------------------
+-- CLEANUP REGISTRY (For Full Script Unload)
+---------------------------------------------------------
+local Connections = {}
+local InstancesToClean = {}
+local OriginalLighting = {
+    Brightness = Lighting.Brightness,
+    ClockTime = Lighting.ClockTime,
+    GlobalShadows = Lighting.GlobalShadows,
+    Ambient = Lighting.Ambient
 }
 
--- Target GUI Parent (CoreGui preferred for executors, fallback PlayerGui)
+local function registerConn(conn)
+    table.insert(Connections, conn)
+    return conn
+end
+
+local function registerInst(inst)
+    table.insert(InstancesToClean, inst)
+    return inst
+end
+
+---------------------------------------------------------
+-- STATE & CONFIG
+---------------------------------------------------------
+local State = {
+    -- Player
+    SpeedEnabled = false,
+    WalkSpeed = 50,
+    Fly = false,
+    FlySpeed = 60,
+    NoClip = false,
+    InfJump = false,
+    AntiAFK = false,
+    
+    -- Rage
+    PunchEnabled = false,
+    PunchMode = "Combined", -- Impulser, Spin, Direct, Combined
+    HitboxEnabled = false,
+    HitboxSize = 10,
+    Spinbot = false,
+    AntiFling = false,
+    
+    -- Fun
+    ClickTP = false,
+    TuxPet = false,
+    Gravity = 196.2,
+    ChatSpam = false,
+    
+    -- Visuals
+    ESP = false,
+    Tracers = false,
+    Nametags = false,
+    Fullbright = false,
+    
+    -- Design
+    Theme = "DarkTux", -- DarkTux, NeonPurple, CyberCyan, Midnight
+    GuiVisible = true
+}
+
+---------------------------------------------------------
+-- THEMES DICTIONARY
+---------------------------------------------------------
+local Themes = {
+    DarkTux = {
+        Header = Color3.fromRGB(30, 30, 46),
+        Card = Color3.fromRGB(24, 24, 37),
+        Accent = Color3.fromRGB(249, 226, 175),
+        Text = Color3.fromRGB(205, 214, 244),
+        Active = Color3.fromRGB(166, 227, 161)
+    },
+    NeonPurple = {
+        Header = Color3.fromRGB(35, 20, 50),
+        Card = Color3.fromRGB(25, 15, 38),
+        Accent = Color3.fromRGB(203, 166, 247),
+        Text = Color3.fromRGB(245, 224, 220),
+        Active = Color3.fromRGB(243, 139, 168)
+    },
+    CyberCyan = {
+        Header = Color3.fromRGB(15, 35, 45),
+        Card = Color3.fromRGB(10, 25, 33),
+        Accent = Color3.fromRGB(148, 226, 213),
+        Text = Color3.fromRGB(227, 240, 245),
+        Active = Color3.fromRGB(137, 220, 235)
+    },
+    Midnight = {
+        Header = Color3.fromRGB(18, 18, 24),
+        Card = Color3.fromRGB(12, 12, 16),
+        Accent = Color3.fromRGB(137, 180, 250),
+        Text = Color3.fromRGB(235, 238, 245),
+        Active = Color3.fromRGB(166, 227, 161)
+    }
+}
+
+local currentTheme = Themes.DarkTux
+
+---------------------------------------------------------
+-- TARGET GUI PARENT & CLEANUP
+---------------------------------------------------------
 local guiParent = game:GetService("CoreGui")
 pcall(function()
     if not guiParent or not pcall(function() return guiParent.Name end) then
@@ -27,198 +118,423 @@ pcall(function()
     end
 end)
 
--- Remove Existing Instance
-if guiParent:FindFirstChild("TuxScriptGUI") then
-    guiParent.TuxScriptGUI:Destroy()
+if guiParent:FindFirstChild("TuxScriptMinecraftGUI") then
+    guiParent.TuxScriptMinecraftGUI:Destroy()
 end
 
--- Create ScreenGui
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "TuxScriptGUI"
+ScreenGui.Name = "TuxScriptMinecraftGUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = guiParent
+registerInst(ScreenGui)
 
 ---------------------------------------------------------
--- DRAGGABLE MAIN FRAME (Tux Theme)
+-- 1. BEAUTIFUL LOADER ANIMATION
 ---------------------------------------------------------
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 280, 0, 380)
-MainFrame.Position = UDim2.new(0.5, -140, 0.35, -190)
-MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 46) -- Dark Slate Navy
-MainFrame.BorderSizePixel = 0
-MainFrame.Active = true
-MainFrame.ClipsDescendants = true
-MainFrame.Parent = ScreenGui
+local LoaderFrame = Instance.new("Frame")
+LoaderFrame.Name = "LoaderFrame"
+LoaderFrame.Size = UDim2.new(0, 320, 0, 180)
+LoaderFrame.Position = UDim2.new(0.5, -160, 0.5, -90)
+LoaderFrame.BackgroundColor3 = currentTheme.Card
+LoaderFrame.BorderSizePixel = 0
+LoaderFrame.ClipsDescendants = true
+LoaderFrame.Parent = ScreenGui
 
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 12)
-MainCorner.Parent = MainFrame
+local LoaderCorner = Instance.new("UICorner")
+LoaderCorner.CornerRadius = UDim.new(0, 14)
+LoaderCorner.Parent = LoaderFrame
 
-local MainStroke = Instance.new("UIStroke")
-MainStroke.Color = Color3.fromRGB(249, 226, 175) -- Tux Yellow Accent
-MainStroke.Thickness = 2
-MainStroke.Parent = MainFrame
+local LoaderStroke = Instance.new("UIStroke")
+LoaderStroke.Color = currentTheme.Accent
+LoaderStroke.Thickness = 2
+LoaderStroke.Parent = LoaderFrame
 
--- Title Bar
-local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Name = "Title"
-TitleLabel.Size = UDim2.new(1, 0, 0, 45)
-TitleLabel.Position = UDim2.new(0, 0, 0, 0)
-TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "Tux Script 🐧"
-TitleLabel.TextColor3 = Color3.fromRGB(249, 226, 175)
-TitleLabel.TextSize = 20
-TitleLabel.Font = Enum.Font.GothamBold
-TitleLabel.Parent = MainFrame
+local LoaderLogo = Instance.new("TextLabel")
+LoaderLogo.Size = UDim2.new(1, 0, 0, 50)
+LoaderLogo.Position = UDim2.new(0, 0, 0, 25)
+LoaderLogo.BackgroundTransparency = 1
+LoaderLogo.Text = "Tux Script 🐧"
+LoaderLogo.TextColor3 = currentTheme.Accent
+LoaderLogo.TextSize = 24
+LoaderLogo.Font = Enum.Font.GothamBold
+LoaderLogo.Parent = LoaderFrame
 
--- Make Main Frame Draggable
-local dragging, dragInput, dragStart, startPos
-local function update(input)
-    local delta = input.Position - dragStart
-    MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-end
+local LoaderStatus = Instance.new("TextLabel")
+LoaderStatus.Size = UDim2.new(1, 0, 0, 25)
+LoaderStatus.Position = UDim2.new(0, 0, 0, 75)
+LoaderStatus.BackgroundTransparency = 1
+LoaderStatus.Text = "Initializing Minecraft Columns..."
+LoaderStatus.TextColor3 = currentTheme.Text
+LoaderStatus.TextSize = 13
+LoaderStatus.Font = Enum.Font.Gotham
+LoaderStatus.Parent = LoaderFrame
 
-MainFrame.InputBegan:Connect(function(input)
+local ProgressBarBg = Instance.new("Frame")
+ProgressBarBg.Size = UDim2.new(0.8, 0, 0, 8)
+ProgressBarBg.Position = UDim2.new(0.1, 0, 0, 120)
+ProgressBarBg.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
+ProgressBarBg.BorderSizePixel = 0
+ProgressBarBg.Parent = LoaderFrame
+
+local ProgressBgCorner = Instance.new("UICorner")
+ProgressBgCorner.CornerRadius = UDim.new(1, 0)
+ProgressBgCorner.Parent = ProgressBarBg
+
+local ProgressBarFill = Instance.new("Frame")
+ProgressBarFill.Size = UDim2.new(0, 0, 1, 0)
+ProgressBarFill.BackgroundColor3 = currentTheme.Accent
+ProgressBarFill.BorderSizePixel = 0
+ProgressBarFill.Parent = ProgressBarBg
+
+local ProgressFillCorner = Instance.new("UICorner")
+ProgressFillCorner.CornerRadius = UDim.new(1, 0)
+ProgressFillCorner.Parent = ProgressBarFill
+
+-- Animate Loader
+local loaderTweenInfo = TweenInfo.new(1.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local progressTween = TweenService:Create(ProgressBarFill, loaderTweenInfo, {Size = UDim2.new(1, 0, 1, 0)})
+progressTween:Play()
+
+progressTween.Completed:Connect(function()
+    LoaderStatus.Text = "Welcome, LO! Ready 🚀"
+    task.wait(0.3)
+    local fadeOut = TweenService:Create(LoaderFrame, TweenInfo.new(0.5), {BackgroundTransparency = 1})
+    fadeOut:Play()
+    for _, child in pairs(LoaderFrame:GetChildren()) do
+        if child:IsA("TextLabel") or child:IsA("Frame") then
+            TweenService:Create(child, TweenInfo.new(0.4), {BackgroundTransparency = 1}):Play()
+            if child:IsA("TextLabel") then
+                TweenService:Create(child, TweenInfo.new(0.4), {TextTransparency = 1}):Play()
+            end
+        end
+    end
+    task.wait(0.5)
+    LoaderFrame.Visible = false
+end)
+
+---------------------------------------------------------
+-- 2. TOP GLOBAL CONTROL BAR & MINECRAFT COLUMNS CONTAINER
+---------------------------------------------------------
+local MainContainer = Instance.new("Frame")
+MainContainer.Name = "MainContainer"
+MainContainer.Size = UDim2.new(0, 950, 0, 480)
+MainContainer.Position = UDim2.new(0.5, -475, 0.5, -240)
+MainContainer.BackgroundTransparency = 1
+MainContainer.Visible = true
+MainContainer.Parent = ScreenGui
+
+-- Top Header Bar
+local HeaderBar = Instance.new("Frame")
+HeaderBar.Name = "HeaderBar"
+HeaderBar.Size = UDim2.new(1, 0, 0, 42)
+HeaderBar.Position = UDim2.new(0, 0, 0, 0)
+HeaderBar.BackgroundColor3 = currentTheme.Header
+HeaderBar.BorderSizePixel = 0
+HeaderBar.Active = true
+HeaderBar.Parent = MainContainer
+
+local HeaderCorner = Instance.new("UICorner")
+HeaderCorner.CornerRadius = UDim.new(0, 10)
+HeaderCorner.Parent = HeaderBar
+
+local HeaderStroke = Instance.new("UIStroke")
+HeaderStroke.Color = currentTheme.Accent
+HeaderStroke.Thickness = 2
+HeaderStroke.Parent = HeaderBar
+
+local HeaderTitle = Instance.new("TextLabel")
+HeaderTitle.Size = UDim2.new(0, 250, 1, 0)
+HeaderTitle.Position = UDim2.new(0, 15, 0, 0)
+HeaderTitle.BackgroundTransparency = 1
+HeaderTitle.Text = "TuxScript 🐧 | Minecraft Cheat Edition"
+HeaderTitle.TextColor3 = currentTheme.Accent
+HeaderTitle.TextSize = 15
+HeaderTitle.Font = Enum.Font.GothamBold
+HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
+HeaderTitle.Parent = HeaderBar
+
+local KeybindNotice = Instance.new("TextLabel")
+KeybindNotice.Size = UDim2.new(0, 200, 1, 0)
+KeybindNotice.Position = UDim2.new(1, -310, 0, 0)
+KeybindNotice.BackgroundTransparency = 1
+KeybindNotice.Text = "[RAlt] to Hide/Show GUI"
+KeybindNotice.TextColor3 = currentTheme.Text
+KeybindNotice.TextSize = 12
+KeybindNotice.Font = Enum.Font.GothamMedium
+KeybindNotice.TextXAlignment = Enum.TextXAlignment.Right
+KeybindNotice.Parent = HeaderBar
+
+-- Header Buttons: Minimize & Full Close (Destroy)
+local MinimizeBtn = Instance.new("TextButton")
+MinimizeBtn.Size = UDim2.new(0, 32, 0, 28)
+MinimizeBtn.Position = UDim2.new(1, -78, 0, 7)
+MinimizeBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
+MinimizeBtn.Text = "─"
+MinimizeBtn.TextColor3 = currentTheme.Text
+MinimizeBtn.Font = Enum.Font.GothamBold
+MinimizeBtn.TextSize = 14
+MinimizeBtn.Parent = HeaderBar
+
+local MinCorner = Instance.new("UICorner")
+MinCorner.CornerRadius = UDim.new(0, 6)
+MinCorner.Parent = MinimizeBtn
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 32, 0, 28)
+CloseBtn.Position = UDim2.new(1, -40, 0, 7)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(235, 87, 87)
+CloseBtn.Text = "✕"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14
+CloseBtn.Parent = HeaderBar
+
+local CloseCorner = Instance.new("UICorner")
+CloseCorner.CornerRadius = UDim.new(0, 6)
+CloseCorner.Parent = CloseBtn
+
+-- Make Main Container Draggable by HeaderBar
+local hDragging, hDragInput, hDragStart, hStartPos
+HeaderBar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = MainFrame.Position
+        hDragging = true
+        hDragStart = input.Position
+        hStartPos = MainContainer.Position
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
+                hDragging = false
             end
         end)
     end
 end)
 
-MainFrame.InputChanged:Connect(function(input)
+HeaderBar.InputChanged:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
+        hDragInput = input
     end
 end)
 
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        update(input)
+registerConn(UserInputService.InputChanged:Connect(function(input)
+    if input == hDragInput and hDragging then
+        local delta = input.Position - hDragStart
+        MainContainer.Position = UDim2.new(hStartPos.X.Scale, hStartPos.X.Offset + delta.X, hStartPos.Y.Scale, hStartPos.Y.Offset + delta.Y)
     end
-end)
+end))
 
--- Scroll Container Layout
-local ScrollFrame = Instance.new("ScrollingFrame")
-ScrollFrame.Name = "Container"
-ScrollFrame.Size = UDim2.new(1, -20, 1, -55)
-ScrollFrame.Position = UDim2.new(0, 10, 0, 50)
-ScrollFrame.BackgroundTransparency = 1
-ScrollFrame.BorderSizePixel = 0
-ScrollFrame.ScrollBarThickness = 4
-ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(249, 226, 175)
-ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-ScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
-ScrollFrame.Parent = MainFrame
+-- Columns Layout Area
+local ColumnsFrame = Instance.new("Frame")
+ColumnsFrame.Name = "ColumnsFrame"
+ColumnsFrame.Size = UDim2.new(1, 0, 1, -50)
+ColumnsFrame.Position = UDim2.new(0, 0, 0, 50)
+ColumnsFrame.BackgroundTransparency = 1
+ColumnsFrame.Parent = MainContainer
 
-local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Parent = ScrollFrame
-UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.new(0, 10)
-UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+local ColumnsLayout = Instance.new("UIListLayout")
+ColumnsLayout.Parent = ColumnsFrame
+ColumnsLayout.FillDirection = Enum.FillDirection.Horizontal
+ColumnsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ColumnsLayout.Padding = UDim.new(0, 12)
+ColumnsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
 ---------------------------------------------------------
--- BUTTON CREATOR HELPER
+-- MINECRAFT CATEGORY COLUMN BUILDER
 ---------------------------------------------------------
-local function createToggleButton(name, defaultState, callback)
+local categoryColumns = {}
+
+local function createCategoryColumn(title, icon, layoutOrder)
+    local col = Instance.new("Frame")
+    col.Name = title .. "Column"
+    col.Size = UDim2.new(0, 180, 1, 0)
+    col.BackgroundColor3 = currentTheme.Card
+    col.BorderSizePixel = 0
+    col.LayoutOrder = layoutOrder
+    col.Parent = ColumnsFrame
+
+    local colCorner = Instance.new("UICorner")
+    colCorner.CornerRadius = UDim.new(0, 10)
+    colCorner.Parent = col
+
+    local colStroke = Instance.new("UIStroke")
+    colStroke.Color = currentTheme.Header
+    colStroke.Thickness = 1.5
+    colStroke.Parent = col
+
+    -- Column Header
+    local cHeader = Instance.new("TextLabel")
+    cHeader.Size = UDim2.new(1, 0, 0, 36)
+    cHeader.Position = UDim2.new(0, 0, 0, 0)
+    cHeader.BackgroundColor3 = currentTheme.Header
+    cHeader.Text = icon .. "  " .. title
+    cHeader.TextColor3 = currentTheme.Accent
+    cHeader.TextSize = 14
+    cHeader.Font = Enum.Font.GothamBold
+    cHeader.Parent = col
+
+    local cHeaderCorner = Instance.new("UICorner")
+    cHeaderCorner.CornerRadius = UDim.new(0, 10)
+    cHeaderCorner.Parent = cHeader
+
+    -- Scroll Area for Features inside Column
+    local cScroll = Instance.new("ScrollingFrame")
+    cScroll.Size = UDim2.new(1, -12, 1, -44)
+    cScroll.Position = UDim2.new(0, 6, 0, 40)
+    cScroll.BackgroundTransparency = 1
+    cScroll.BorderSizePixel = 0
+    cScroll.ScrollBarThickness = 3
+    cScroll.ScrollBarImageColor3 = currentTheme.Accent
+    cScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    cScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    cScroll.Parent = col
+
+    local cLayout = Instance.new("UIListLayout")
+    cLayout.Parent = cScroll
+    cLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    cLayout.Padding = UDim.new(0, 6)
+    cLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+    categoryColumns[title] = cScroll
+    return cScroll
+end
+
+-- Create the 5 Requested Minecraft Categories
+local playerScroll  = createCategoryColumn("Player", "👤", 1)
+local rageScroll    = createCategoryColumn("Rage", "⚡", 2)
+local funScroll     = createCategoryColumn("Fun", "🎮", 3)
+local visualsScroll = createCategoryColumn("Visuals", "👁️", 4)
+local designScroll  = createCategoryColumn("Design", "🎨", 5)
+
+---------------------------------------------------------
+-- UI MODULE BUILDERS (Toggles, Sliders, Dropdowns)
+---------------------------------------------------------
+
+-- Create Module Toggle Button
+local function addModuleToggle(parentScroll, name, defaultState, callback)
     local btn = Instance.new("TextButton")
-    btn.Name = name .. "Btn"
-    btn.Size = UDim2.new(0.95, 0, 0, 42)
-    btn.BackgroundColor3 = defaultState and Color3.fromRGB(166, 227, 161) or Color3.fromRGB(45, 45, 65)
-    btn.Text = name .. ": " .. (defaultState and "ON" or "OFF")
-    btn.TextColor3 = defaultState and Color3.fromRGB(17, 17, 27) or Color3.fromRGB(205, 214, 244)
+    btn.Name = name .. "Toggle"
+    btn.Size = UDim2.new(0.96, 0, 0, 34)
+    btn.BackgroundColor3 = defaultState and currentTheme.Active or Color3.fromRGB(38, 38, 55)
+    btn.Text = name
+    btn.TextColor3 = defaultState and Color3.fromRGB(17, 17, 27) or currentTheme.Text
     btn.Font = Enum.Font.GothamMedium
-    btn.TextSize = 14
-    btn.Parent = ScrollFrame
+    btn.TextSize = 12
+    btn.Parent = parentScroll
 
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
+    corner.CornerRadius = UDim.new(0, 6)
     corner.Parent = btn
 
     local state = defaultState
     btn.MouseButton1Click:Connect(function()
         state = not state
-        btn.BackgroundColor3 = state and Color3.fromRGB(166, 227, 161) or Color3.fromRGB(45, 45, 65)
-        btn.Text = name .. ": " .. (state and "ON" or "OFF")
-        btn.TextColor3 = state and Color3.fromRGB(17, 17, 27) or Color3.fromRGB(205, 214, 244)
+        local targetColor = state and currentTheme.Active or Color3.fromRGB(38, 38, 55)
+        local targetTextColor = state and Color3.fromRGB(17, 17, 27) or currentTheme.Text
+        
+        TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = targetColor, TextColor3 = targetTextColor}):Play()
         callback(state)
     end)
     return btn
 end
 
----------------------------------------------------------
--- FEATURES IMPLEMENTATION
----------------------------------------------------------
+-- Create Module Slider
+local function addModuleSlider(parentScroll, name, min, max, defaultVal, callback)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0.96, 0, 0, 48)
+    frame.BackgroundColor3 = Color3.fromRGB(32, 32, 48)
+    frame.Parent = parentScroll
 
--- 1. NoClip
-RunService.Stepped:Connect(function()
-    if State.NoClip and LocalPlayer.Character then
-        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = frame
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size = UDim2.new(1, -10, 0, 22)
+    titleLbl.Position = UDim2.new(0, 5, 0, 2)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Text = name .. ": " .. tostring(defaultVal)
+    titleLbl.TextColor3 = currentTheme.Text
+    titleLbl.Font = Enum.Font.Gotham
+    titleLbl.TextSize = 11
+    titleLbl.Parent = frame
+
+    local sliderBg = Instance.new("Frame")
+    sliderBg.Size = UDim2.new(0.9, 0, 0, 6)
+    sliderBg.Position = UDim2.new(0.05, 0, 0, 30)
+    sliderBg.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+    sliderBg.Parent = frame
+
+    local sCorner = Instance.new("UICorner")
+    sCorner.CornerRadius = UDim.new(1, 0)
+    sCorner.Parent = sliderBg
+
+    local fillPercent = math.clamp((defaultVal - min) / (max - min), 0, 1)
+    local sliderFill = Instance.new("Frame")
+    sliderFill.Size = UDim2.new(fillPercent, 0, 1, 0)
+    sliderFill.BackgroundColor3 = currentTheme.Accent
+    sliderFill.Parent = sliderBg
+
+    local fCorner = Instance.new("UICorner")
+    fCorner.CornerRadius = UDim.new(1, 0)
+    fCorner.Parent = sliderFill
+
+    local sDragging = false
+    local function updateSlider(input)
+        local pos = math.clamp((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
+        local val = math.floor(min + (max - min) * pos)
+        sliderFill.Size = UDim2.new(pos, 0, 1, 0)
+        titleLbl.Text = name .. ": " .. tostring(val)
+        callback(val)
     end
-end)
 
-createToggleButton("NoClip 👻", false, function(enabled)
-    State.NoClip = enabled
-end)
-
--- 2. ESP (Highlight)
-local espHighlights = {}
-
-local function applyESP(player)
-    if player == LocalPlayer then return end
-    local function highlightChar(char)
-        if not char then return end
-        if not espHighlights[player] then
-            local hl = Instance.new("Highlight")
-            hl.Name = "TuxESP"
-            hl.FillColor = Color3.fromRGB(249, 226, 175)
-            hl.OutlineColor = Color3.fromRGB(255, 255, 255)
-            hl.FillTransparency = 0.4
-            hl.Enabled = State.ESP
-            hl.Parent = char
-            espHighlights[player] = hl
-        else
-            espHighlights[player].Parent = char
-            espHighlights[player].Enabled = State.ESP
+    sliderBg.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            sDragging = true
+            updateSlider(input)
         end
-    end
-    if player.Character then highlightChar(player.Character) end
-    player.CharacterAdded:Connect(highlightChar)
+    end)
+
+    registerConn(UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            sDragging = false
+        end
+    end))
+
+    registerConn(UserInputService.InputChanged:Connect(function(input)
+        if sDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            updateSlider(input)
+        end
+    end))
 end
 
-for _, plr in pairs(Players:GetPlayers()) do
-    applyESP(plr)
-end
-Players.PlayerAdded:Connect(applyESP)
+---------------------------------------------------------
+-- 3. CATEGORY MODULES IMPLEMENTATION
+---------------------------------------------------------
 
-createToggleButton("ESP 👁️", false, function(enabled)
-    State.ESP = enabled
-    for _, hl in pairs(espHighlights) do
-        if hl then hl.Enabled = enabled end
-    end
+-- ==================== PLAYER CATEGORY ====================
+
+-- Speedhack
+addModuleToggle(playerScroll, "Speedhack ⚡", false, function(enabled)
+    State.SpeedEnabled = enabled
+end)
+addModuleSlider(playerScroll, "Speed", 16, 200, 50, function(val)
+    State.WalkSpeed = val
 end)
 
--- 3. UPRIGHT CFrame Fly
+registerConn(RunService.Stepped:Connect(function()
+    if State.SpeedEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = State.WalkSpeed
+    end
+end))
+
+-- Fly (Upright CFrame)
 local flyConn
-createToggleButton("Fly 🕊️", false, function(enabled)
+addModuleToggle(playerScroll, "Fly 🕊️", false, function(enabled)
     State.Fly = enabled
     local char = LocalPlayer.Character
     if not char then return end
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
 
     if enabled then
         if flyConn then flyConn:Disconnect() end
-        flyConn = RunService.RenderStepped:Connect(function(dt)
+        flyConn = registerConn(RunService.RenderStepped:Connect(function(dt)
             if not State.Fly or not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 if flyConn then flyConn:Disconnect() end
                 return
@@ -228,9 +544,7 @@ createToggleButton("Fly 🕊️", false, function(enabled)
             local curHrp = curChar:FindFirstChild("HumanoidRootPart")
             local curHum = curChar:FindFirstChildOfClass("Humanoid")
 
-            if curHum then
-                curHum.PlatformStand = false
-            end
+            if curHum then curHum.PlatformStand = false end
 
             if curHrp then
                 curHrp.AssemblyLinearVelocity = Vector3.zero
@@ -246,7 +560,6 @@ createToggleButton("Fly 🕊️", false, function(enabled)
                 if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, 1, 0) end
                 if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0, 1, 0) end
 
-                -- Mobile Joystick Support
                 if curHum and curHum.MoveDirection.Magnitude > 0 and moveDir == Vector3.zero then
                     moveDir = (camCF:VectorToWorldSpace(curHum.MoveDirection)).Unit
                 end
@@ -257,187 +570,108 @@ createToggleButton("Fly 🕊️", false, function(enabled)
                     curHrp.CFrame = CFrame.new(nextPos) * yawCFrame
                 end
             end
-        end)
+        end))
     else
         if flyConn then flyConn:Disconnect() end
     end
 end)
 
----------------------------------------------------------
--- 4. PUNCH BUTTON WITH MODE DROPDOWN & FLOATING TOGGLE
----------------------------------------------------------
-local PunchScreenGui = Instance.new("ScreenGui")
-PunchScreenGui.Name = "TuxPunchGui"
-PunchScreenGui.ResetOnSpawn = false
-PunchScreenGui.Enabled = false -- Hidden by default until activated in menu
-PunchScreenGui.Parent = guiParent
+-- NoClip
+registerConn(RunService.Stepped:Connect(function()
+    if State.NoClip and LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end))
+addModuleToggle(playerScroll, "NoClip 👻", false, function(enabled)
+    State.NoClip = enabled
+end)
+
+-- Infinite Jump
+registerConn(UserInputService.JumpRequest:Connect(function()
+    if State.InfJump and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end))
+addModuleToggle(playerScroll, "Infinite Jump 🦘", false, function(enabled)
+    State.InfJump = enabled
+end)
+
+-- Anti-AFK
+local afkConn
+addModuleToggle(playerScroll, "Anti-AFK ⏰", false, function(enabled)
+    State.AntiAFK = enabled
+    if enabled then
+        local vu = game:GetService("VirtualUser")
+        afkConn = registerConn(LocalPlayer.Idled:Connect(function()
+            vu:Button2Down(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
+            task.wait(1)
+            vu:Button2Up(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
+        end))
+    else
+        if afkConn then afkConn:Disconnect() end
+    end
+end)
+
+-- ==================== RAGE CATEGORY ====================
+
+-- Floating Action Button for Super Punch
+local PunchActionGui = Instance.new("ScreenGui")
+PunchActionGui.Name = "TuxPunchActionGui"
+PunchActionGui.ResetOnSpawn = false
+PunchActionGui.Enabled = false
+PunchActionGui.Parent = guiParent
+registerInst(PunchActionGui)
 
 local PunchBtn = Instance.new("TextButton")
-PunchBtn.Name = "PunchActionButton"
-PunchBtn.Size = UDim2.new(0, 75, 0, 75)
-PunchBtn.Position = UDim2.new(0.85, -37, 0.75, -37)
-PunchBtn.BackgroundColor3 = Color3.fromRGB(249, 226, 175)
+PunchBtn.Size = UDim2.new(0, 70, 0, 70)
+PunchBtn.Position = UDim2.new(0.85, -35, 0.75, -35)
+PunchBtn.BackgroundColor3 = currentTheme.Accent
 PunchBtn.Text = "PUNCH\n🥊"
 PunchBtn.TextColor3 = Color3.fromRGB(17, 17, 27)
 PunchBtn.Font = Enum.Font.GothamBold
-PunchBtn.TextSize = 14
-PunchBtn.Parent = PunchScreenGui
+PunchBtn.TextSize = 13
+PunchBtn.Parent = PunchActionGui
 
-local PunchCorner = Instance.new("UICorner")
-PunchCorner.CornerRadius = UDim.new(1, 0)
-PunchCorner.Parent = PunchBtn
+local pCorner = Instance.new("UICorner")
+pCorner.CornerRadius = UDim.new(1, 0)
+pCorner.Parent = PunchBtn
 
-local PunchStroke = Instance.new("UIStroke")
-PunchStroke.Color = Color3.fromRGB(255, 255, 255)
-PunchStroke.Thickness = 3
-PunchStroke.Parent = PunchBtn
+local pStroke = Instance.new("UIStroke")
+pStroke.Color = Color3.fromRGB(255, 255, 255)
+pStroke.Thickness = 2
+pStroke.Parent = PunchBtn
 
--- Draggable Floating Punch Action Button
-local pDragging, pDragInput, pDragStart, pStartPos
+-- Draggable Punch Action Button
+local pDrag, pInput, pStart, pPos
 PunchBtn.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        pDragging = true
-        pDragStart = input.Position
-        pStartPos = PunchBtn.Position
+        pDrag = true
+        pStart = input.Position
+        pPos = PunchBtn.Position
         input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                pDragging = false
-            end
+            if input.UserInputState == Enum.UserInputState.End then pDrag = false end
         end)
     end
 end)
 
 PunchBtn.InputChanged:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        pDragInput = input
+        pInput = input
     end
 end)
 
-UserInputService.InputChanged:Connect(function(input)
-    if input == pDragInput and pDragging then
-        local delta = input.Position - pDragStart
-        PunchBtn.Position = UDim2.new(pStartPos.X.Scale, pStartPos.X.Offset + delta.X, pStartPos.Y.Scale, pStartPos.Y.Offset + delta.Y)
+registerConn(UserInputService.InputChanged:Connect(function(input)
+    if input == pInput and pDrag then
+        local delta = input.Position - pStart
+        PunchBtn.Position = UDim2.new(pPos.X.Scale, pPos.X.Offset + delta.X, pPos.Y.Scale, pPos.Y.Offset + delta.Y)
     end
-end)
+end))
 
--- Create Combined Punch Container in Menu (Toggle Button + Arrow Settings Dropdown)
-local PunchMenuFrame = Instance.new("Frame")
-PunchMenuFrame.Name = "PunchMenuFrame"
-PunchMenuFrame.Size = UDim2.new(0.95, 0, 0, 42)
-PunchMenuFrame.BackgroundTransparency = 1
-PunchMenuFrame.Parent = ScrollFrame
-
-local MainPunchToggle = Instance.new("TextButton")
-MainPunchToggle.Name = "MainPunchToggle"
-MainPunchToggle.Size = UDim2.new(0.78, 0, 0, 42)
-MainPunchToggle.Position = UDim2.new(0, 0, 0, 0)
-MainPunchToggle.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
-MainPunchToggle.Text = "Punch Button 🥊: OFF"
-MainPunchToggle.TextColor3 = Color3.fromRGB(205, 214, 244)
-MainPunchToggle.Font = Enum.Font.GothamMedium
-MainPunchToggle.TextSize = 13
-MainPunchToggle.Parent = PunchMenuFrame
-
-local MainPunchCorner = Instance.new("UICorner")
-MainPunchCorner.CornerRadius = UDim.new(0, 8)
-MainPunchCorner.Parent = MainPunchToggle
-
-local SettingsArrowBtn = Instance.new("TextButton")
-SettingsArrowBtn.Name = "SettingsArrowBtn"
-SettingsArrowBtn.Size = UDim2.new(0.18, 0, 0, 42)
-SettingsArrowBtn.Position = UDim2.new(0.82, 0, 0, 0)
-SettingsArrowBtn.BackgroundColor3 = Color3.fromRGB(58, 58, 85)
-SettingsArrowBtn.Text = "▶"
-SettingsArrowBtn.TextColor3 = Color3.fromRGB(249, 226, 175)
-SettingsArrowBtn.Font = Enum.Font.GothamBold
-SettingsArrowBtn.TextSize = 14
-SettingsArrowBtn.Parent = PunchMenuFrame
-
-local ArrowCorner = Instance.new("UICorner")
-ArrowCorner.CornerRadius = UDim.new(0, 8)
-ArrowCorner.Parent = SettingsArrowBtn
-
--- Punch Settings Sub-panel
-local SettingsPanel = Instance.new("Frame")
-SettingsPanel.Name = "SettingsPanel"
-SettingsPanel.Size = UDim2.new(0.95, 0, 0, 0)
-SettingsPanel.BackgroundColor3 = Color3.fromRGB(24, 24, 37)
-SettingsPanel.BorderSizePixel = 0
-SettingsPanel.Visible = false
-SettingsPanel.ClipsDescendants = true
-SettingsPanel.Parent = ScrollFrame
-
-local SettingsCorner = Instance.new("UICorner")
-SettingsCorner.CornerRadius = UDim.new(0, 8)
-SettingsCorner.Parent = SettingsPanel
-
-local SettingsLayout = Instance.new("UIListLayout")
-SettingsLayout.Parent = SettingsPanel
-SettingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-SettingsLayout.Padding = UDim.new(0, 5)
-SettingsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-
-local SettingsPadding = Instance.new("UIPadding")
-SettingsPadding.PaddingTop = UDim.new(0, 8)
-SettingsPadding.PaddingBottom = UDim.new(0, 8)
-SettingsPadding.Parent = SettingsPanel
-
--- Mode Buttons in Settings Panel
-local modesList = {
-    {id = "Combined", label = "Mode: Protected Super Fling 🔥"},
-    {id = "Impulser", label = "Mode 1: Rotor Spin Proxy 🌀"},
-    {id = "Spin", label = "Mode 2: Orbital Sweep Proxy ⚡"},
-    {id = "Direct", label = "Mode 3: Touch Surge Proxy 💨"}
-}
-
-local modeButtons = {}
-for _, modeData in ipairs(modesList) do
-    local mBtn = Instance.new("TextButton")
-    mBtn.Name = "Mode_" .. modeData.id
-    mBtn.Size = UDim2.new(0.9, 0, 0, 32)
-    mBtn.BackgroundColor3 = (State.PunchMode == modeData.id) and Color3.fromRGB(249, 226, 175) or Color3.fromRGB(45, 45, 65)
-    mBtn.Text = modeData.label
-    mBtn.TextColor3 = (State.PunchMode == modeData.id) and Color3.fromRGB(17, 17, 27) or Color3.fromRGB(205, 214, 244)
-    mBtn.Font = Enum.Font.GothamMedium
-    mBtn.TextSize = 12
-    mBtn.Parent = SettingsPanel
-
-    local mCorner = Instance.new("UICorner")
-    mCorner.CornerRadius = UDim.new(0, 6)
-    mCorner.Parent = mBtn
-
-    mBtn.MouseButton1Click:Connect(function()
-        State.PunchMode = modeData.id
-        for id, b in pairs(modeButtons) do
-            local isSel = (id == modeData.id)
-            b.BackgroundColor3 = isSel and Color3.fromRGB(249, 226, 175) or Color3.fromRGB(45, 45, 65)
-            b.TextColor3 = isSel and Color3.fromRGB(17, 17, 27) or Color3.fromRGB(205, 214, 244)
-        end
-    end)
-    modeButtons[modeData.id] = mBtn
-end
-
--- Toggle Punch Button Visibility
-MainPunchToggle.MouseButton1Click:Connect(function()
-    State.PunchEnabled = not State.PunchEnabled
-    PunchScreenGui.Enabled = State.PunchEnabled
-    MainPunchToggle.BackgroundColor3 = State.PunchEnabled and Color3.fromRGB(166, 227, 161) or Color3.fromRGB(45, 45, 65)
-    MainPunchToggle.Text = "Punch Button 🥊: " .. (State.PunchEnabled and "ON" or "OFF")
-    MainPunchToggle.TextColor3 = State.PunchEnabled and Color3.fromRGB(17, 17, 27) or Color3.fromRGB(205, 214, 244)
-end)
-
--- Toggle Settings Dropdown Panel
-local isSettingsOpen = false
-SettingsArrowBtn.MouseButton1Click:Connect(function()
-    isSettingsOpen = not isSettingsOpen
-    SettingsArrowBtn.Text = isSettingsOpen and "▼" or "▶"
-    SettingsPanel.Visible = isSettingsOpen
-    SettingsPanel.Size = isSettingsOpen and UDim2.new(0.95, 0, 0, 160) or UDim2.new(0.95, 0, 0, 0)
-end)
-
----------------------------------------------------------
--- NO-DEATH PROTECTED PROXY FLING ENGINE
----------------------------------------------------------
+-- Protected Fling Action
 local isPunching = false
 local function performSuperPunch()
     if isPunching then return end
@@ -449,7 +683,7 @@ local function performSuperPunch()
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not humanoid then isPunching = false; return end
 
-    -- 1. Visual Arm Swing Animation (Local Player stays completely safe)
+    -- Visual Arm Swing
     task.spawn(function()
         pcall(function()
             local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
@@ -468,10 +702,9 @@ local function performSuperPunch()
         end
     end)
 
-    -- 2. Detect Closest Target Player
+    -- Closest Target Detection
     local targetHrp = nil
     local closestDist = 50
-
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local tHrp = player.Character:FindFirstChild("HumanoidRootPart")
@@ -485,13 +718,11 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Character-Replicated Protected Fling Proxy
+    -- Execute Protected Proxy Fling
     if targetHrp then
         local pushDir = (targetHrp.Position - hrp.Position).Unit
         if pushDir ~= pushDir then pushDir = hrp.CFrame.LookVector end
-        local mode = State.PunchMode
 
-        -- Create Fling Proxy Part INSIDE Local Character (Replicates to Server!)
         local flingPart = Instance.new("Part")
         flingPart.Name = "TuxFlingProxy"
         flingPart.Size = Vector3.new(6, 6, 6)
@@ -503,7 +734,6 @@ local function performSuperPunch()
         flingPart.CFrame = targetHrp.CFrame
         flingPart.Parent = char
 
-        -- Attach NoCollisionConstraint to 100% ISOLATE LocalPlayer from Fling Recoil & Damage!
         for _, part in pairs(char:GetDescendants()) do
             if part:IsA("BasePart") and part ~= flingPart then
                 local ncc = Instance.new("NoCollisionConstraint")
@@ -513,7 +743,6 @@ local function performSuperPunch()
             end
         end
 
-        -- Add Extreme Angular Velocity & Velocity Forces to Proxy Part
         local bav = Instance.new("BodyAngularVelocity")
         bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
         bav.AngularVelocity = Vector3.new(999999, 999999, 999999)
@@ -524,29 +753,15 @@ local function performSuperPunch()
         bv.Velocity = (pushDir * 7000) + Vector3.new(0, 3000, 0)
         bv.Parent = flingPart
 
-        -- Fling Impact Loop (Target takes 100% of hit, LocalPlayer stays 100% safe!)
         local startTime = tick()
         local angle = 0
         while tick() - startTime < 0.25 do
             angle = angle + 120
             if targetHrp and targetHrp.Parent then
-                if mode == "Spin" or mode == "Combined" then
-                    flingPart.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(angle), 0)
-                else
-                    flingPart.CFrame = targetHrp.CFrame
-                end
-
-                pcall(function()
-                    if firetouchinterest then
-                        firetouchinterest(flingPart, targetHrp, 0)
-                        firetouchinterest(flingPart, targetHrp, 1)
-                    end
-                end)
+                flingPart.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(angle), 0)
             end
             RunService.Heartbeat:Wait()
         end
-
-        -- Destroy Fling Proxy Part cleanly
         flingPart:Destroy()
     end
 
@@ -556,4 +771,348 @@ end
 
 PunchBtn.MouseButton1Click:Connect(performSuperPunch)
 
-print("Tux Script 🐧 loaded successfully!")
+addModuleToggle(rageScroll, "Super Punch 🥊", false, function(enabled)
+    State.PunchEnabled = enabled
+    PunchActionGui.Enabled = enabled
+end)
+
+-- Hitbox Expander
+addModuleToggle(rageScroll, "Hitbox Expander 📦", false, function(enabled)
+    State.HitboxEnabled = enabled
+end)
+addModuleSlider(rageScroll, "Hitbox Size", 4, 25, 10, function(val)
+    State.HitboxSize = val
+end)
+
+registerConn(RunService.RenderStepped:Connect(function()
+    if State.HitboxEnabled then
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    hrp.Size = Vector3.new(State.HitboxSize, State.HitboxSize, State.HitboxSize)
+                    hrp.Transparency = 0.7
+                    hrp.Color = currentTheme.Accent
+                    hrp.Material = Enum.Material.ForceField
+                    hrp.CanCollide = false
+                end
+            end
+        end
+    end
+end))
+
+-- Spinbot
+addModuleToggle(rageScroll, "Spinbot 🌀", false, function(enabled)
+    State.Spinbot = enabled
+end)
+
+registerConn(RunService.RenderStepped:Connect(function()
+    if State.Spinbot and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        LocalPlayer.Character.HumanoidRootPart.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame * CFrame.Angles(0, math.rad(50), 0)
+    end
+end))
+
+-- Anti-Fling Shield
+addModuleToggle(rageScroll, "Anti-Fling Shield 🛡️", false, function(enabled)
+    State.AntiFling = enabled
+end)
+
+registerConn(RunService.Heartbeat:Connect(function()
+    if State.AntiFling and LocalPlayer.Character then
+        local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp and hrp.AssemblyLinearVelocity.Magnitude > 150 then
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        end
+    end
+end))
+
+-- ==================== FUN CATEGORY ====================
+
+-- Click Teleport
+addModuleToggle(funScroll, "Click Teleport 📍", false, function(enabled)
+    State.ClickTP = enabled
+end)
+
+registerConn(UserInputService.InputBegan:Connect(function(input, gpe)
+    if not gpe and State.ClickTP and input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if Mouse.Target and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(Mouse.Hit.Position + Vector3.new(0, 3, 0))
+        end
+    end
+end))
+
+-- Tux Companion Pet
+local petModel = nil
+addModuleToggle(funScroll, "Tux Companion Pet 🐧", false, function(enabled)
+    State.TuxPet = enabled
+    if enabled then
+        if petModel then petModel:Destroy() end
+        petModel = Instance.new("Part")
+        petModel.Name = "TuxPet"
+        petModel.Size = Vector3.new(1.5, 1.8, 1.2)
+        petModel.Color = Color3.fromRGB(30, 30, 46)
+        petModel.Material = Enum.Material.SmoothPlastic
+        petModel.CanCollide = false
+        petModel.Parent = Workspace
+        registerInst(petModel)
+
+        local petFace = Instance.new("Decal")
+        petFace.Texture = "rbxassetid://28328223"
+        petFace.Face = Enum.NormalId.Front
+        petFace.Parent = petModel
+
+        local petGlow = Instance.new("SelectionBox")
+        petGlow.Adornee = petModel
+        petGlow.Color3 = currentTheme.Accent
+        petGlow.Parent = petModel
+
+        local petAngle = 0
+        registerConn(RunService.RenderStepped:Connect(function()
+            if State.TuxPet and petModel and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                petAngle = petAngle + 2
+                local hrp = LocalPlayer.Character.HumanoidRootPart
+                local offset = Vector3.new(math.sin(math.rad(petAngle)) * 3.5, 2.5 + math.sin(math.rad(petAngle * 2)) * 0.5, math.cos(math.rad(petAngle)) * 3.5)
+                petModel.CFrame = CFrame.new(hrp.Position + offset, hrp.Position)
+            else
+                if petModel then petModel:Destroy() end
+            end
+        end))
+    else
+        if petModel then petModel:Destroy(); petModel = nil end
+    end
+end)
+
+-- Gravity Modifier
+addModuleSlider(funScroll, "Gravity", 0, 196, 196, function(val)
+    Workspace.Gravity = val
+end)
+
+-- Chat Spammer
+local spamConn
+addModuleToggle(funScroll, "Tux Chat Spammer 💬", false, function(enabled)
+    State.ChatSpam = enabled
+    if enabled then
+        spamConn = task.spawn(function()
+            while State.ChatSpam do
+                pcall(function()
+                    game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer("Tux Script 🐧 | Best Roblox Cheat Engine!", "All")
+                end)
+                task.wait(4)
+            end
+        end)
+    end
+end)
+
+-- ==================== VISUALS CATEGORY ====================
+
+-- Highlight ESP
+local espHighlights = {}
+local function applyESP(player)
+    if player == LocalPlayer then return end
+    local function highlightChar(char)
+        if not char then return end
+        if not espHighlights[player] then
+            local hl = Instance.new("Highlight")
+            hl.Name = "TuxESP"
+            hl.FillColor = currentTheme.Accent
+            hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+            hl.FillTransparency = 0.4
+            hl.Enabled = State.ESP
+            hl.Parent = char
+            espHighlights[player] = hl
+            registerInst(hl)
+        else
+            espHighlights[player].Parent = char
+            espHighlights[player].Enabled = State.ESP
+        end
+    end
+    if player.Character then highlightChar(player.Character) end
+    registerConn(player.CharacterAdded:Connect(highlightChar))
+end
+
+for _, plr in pairs(Players:GetPlayers()) do applyESP(plr) end
+registerConn(Players.PlayerAdded:Connect(applyESP))
+
+addModuleToggle(visualsScroll, "Highlight ESP 👁️", false, function(enabled)
+    State.ESP = enabled
+    for _, hl in pairs(espHighlights) do
+        if hl then hl.Enabled = enabled end
+    end
+end)
+
+-- Tracers ESP
+local tracerLines = {}
+addModuleToggle(visualsScroll, "Tracers 🎯", false, function(enabled)
+    State.Tracers = enabled
+end)
+
+registerConn(RunService.RenderStepped:Connect(function()
+    if State.Tracers then
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = player.Character.HumanoidRootPart
+                local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+                
+                if onScreen then
+                    local line = tracerLines[player]
+                    if not line then
+                        line = Drawing.new("Line")
+                        line.Thickness = 1.5
+                        line.Color = currentTheme.Accent
+                        line.Transparency = 0.8
+                        tracerLines[player] = line
+                    end
+                    line.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                    line.To = Vector2.new(screenPos.X, screenPos.Y)
+                    line.Visible = true
+                else
+                    if tracerLines[player] then tracerLines[player].Visible = false end
+                end
+            else
+                if tracerLines[player] then tracerLines[player].Visible = false end
+            end
+        end
+    else
+        for _, line in pairs(tracerLines) do
+            line.Visible = false
+        end
+    end
+end))
+
+-- Fullbright
+addModuleToggle(visualsScroll, "Fullbright ☀️", false, function(enabled)
+    State.Fullbright = enabled
+    if enabled then
+        Lighting.Brightness = 3
+        Lighting.ClockTime = 14
+        Lighting.GlobalShadows = false
+        Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+    else
+        Lighting.Brightness = OriginalLighting.Brightness
+        Lighting.ClockTime = OriginalLighting.ClockTime
+        Lighting.GlobalShadows = OriginalLighting.GlobalShadows
+        Lighting.Ambient = OriginalLighting.Ambient
+    end
+end)
+
+-- ==================== DESIGN & CONTROL CATEGORY ====================
+
+-- Theme Switches
+local themeList = {"DarkTux", "NeonPurple", "CyberCyan", "Midnight"}
+for _, themeName in ipairs(themeList) do
+    addModuleToggle(designScroll, "Theme: " .. themeName, (State.Theme == themeName), function()
+        State.Theme = themeName
+        currentTheme = Themes[themeName]
+        HeaderBar.BackgroundColor3 = currentTheme.Header
+        HeaderStroke.Color = currentTheme.Accent
+        HeaderTitle.TextColor3 = currentTheme.Accent
+        LoaderStroke.Color = currentTheme.Accent
+        ProgressBarFill.BackgroundColor3 = currentTheme.Accent
+        PunchBtn.BackgroundColor3 = currentTheme.Accent
+        
+        for _, col in pairs(ColumnsFrame:GetChildren()) do
+            if col:IsA("Frame") then
+                col.BackgroundColor3 = currentTheme.Card
+                local cHead = col:FindFirstChildOfClass("TextLabel")
+                if cHead then
+                    cHead.BackgroundColor3 = currentTheme.Header
+                    cHead.TextColor3 = currentTheme.Accent
+                end
+            end
+        end
+    end)
+end
+
+-- Full Unload Script (Destroys Everything Cleanly)
+addModuleToggle(designScroll, "UNLOAD SCRIPT ❌", false, function()
+    print("Unloading Tux Script 🐧...")
+    
+    -- Disconnect All Signals
+    for _, conn in ipairs(Connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    
+    -- Restore Lighting
+    Lighting.Brightness = OriginalLighting.Brightness
+    Lighting.ClockTime = OriginalLighting.ClockTime
+    Lighting.GlobalShadows = OriginalLighting.GlobalShadows
+    Lighting.Ambient = OriginalLighting.Ambient
+
+    -- Clean Drawings
+    for _, line in pairs(tracerLines) do
+        pcall(function() line:Remove() end)
+    end
+
+    -- Clean Instances & ScreenGui
+    for _, inst in ipairs(InstancesToClean) do
+        pcall(function() inst:Destroy() end)
+    end
+
+    ScreenGui:Destroy()
+    print("Tux Script 🐧 cleanly unloaded!")
+end)
+
+---------------------------------------------------------
+-- WINDOW CONTROLS & KEYBIND TOGGLE (RAlt / Mobile Toggle)
+---------------------------------------------------------
+
+-- Minimize Button
+local isMinimized = false
+MinimizeBtn.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    ColumnsFrame.Visible = not isMinimized
+    MainContainer.Size = isMinimized and UDim2.new(0, 950, 0, 42) or UDim2.new(0, 950, 0, 480)
+end)
+
+-- Close Button (Unloads Script Completely)
+CloseBtn.MouseButton1Click:Connect(function()
+    -- Trigger Unload
+    for _, conn in ipairs(Connections) do pcall(function() conn:Disconnect() end) end
+    Lighting.Brightness = OriginalLighting.Brightness
+    Lighting.ClockTime = OriginalLighting.ClockTime
+    Lighting.GlobalShadows = OriginalLighting.GlobalShadows
+    Lighting.Ambient = OriginalLighting.Ambient
+    for _, line in pairs(tracerLines) do pcall(function() line:Remove() end) end
+    ScreenGui:Destroy()
+    print("Tux Script 🐧 cleanly unloaded via Close Button!")
+end)
+
+-- RAlt Keybind Toggle & Mobile Floating Toggle
+registerConn(UserInputService.InputBegan:Connect(function(input, gpe)
+    if not gpe and input.KeyCode == Enum.KeyCode.RightAlt then
+        State.GuiVisible = not State.GuiVisible
+        MainContainer.Visible = State.GuiVisible
+    end
+end))
+
+-- Floating Mobile GUI Toggle Button (For iOS/Android users without RAlt key)
+local MobileToggleGui = Instance.new("ScreenGui")
+MobileToggleGui.Name = "TuxMobileToggle"
+MobileToggleGui.ResetOnSpawn = false
+MobileToggleGui.Parent = guiParent
+registerInst(MobileToggleGui)
+
+local MobileBtn = Instance.new("TextButton")
+MobileBtn.Size = UDim2.new(0, 45, 0, 45)
+MobileBtn.Position = UDim2.new(0, 15, 0.4, 0)
+MobileBtn.BackgroundColor3 = currentTheme.Header
+MobileBtn.Text = "🐧"
+MobileBtn.TextSize = 22
+MobileBtn.Parent = MobileToggleGui
+
+local mCorner = Instance.new("UICorner")
+mCorner.CornerRadius = UDim.new(1, 0)
+mCorner.Parent = MobileBtn
+
+local mStroke = Instance.new("UIStroke")
+mStroke.Color = currentTheme.Accent
+mStroke.Thickness = 2
+mStroke.Parent = MobileBtn
+
+MobileBtn.MouseButton1Click:Connect(function()
+    State.GuiVisible = not State.GuiVisible
+    MainContainer.Visible = State.GuiVisible
+end)
+
+print("Tux Script 🐧 Minecraft Cheat GUI initialized successfully!")
