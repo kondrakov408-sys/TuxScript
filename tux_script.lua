@@ -705,21 +705,22 @@ local function performSuperPunch()
         end
     end)
 
-    -- 2. Detect Closest Target Player (Universal R6 / R15 / Rthro / Custom Avatar Support)
+    -- 2. Detect Closest Target Player (5-Technique Universal Avatar Detection: R6, R15, Rthro, Layered, Custom)
     local targetCharacter = nil
     local targetPart = nil
-    local closestDist = 150
+    local closestDist = 250
 
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local tChar = player.Character
             local tHum = tChar:FindFirstChildOfClass("Humanoid")
             
-            -- Multi-part fallback to find valid target part on any avatar structure
+            -- Dual-part fallback across HumanoidRootPart, Torso, UpperTorso, LowerTorso, Head, or any BasePart
             local tMainPart = tChar:FindFirstChild("HumanoidRootPart")
                 or tChar:FindFirstChild("Torso")
                 or tChar:FindFirstChild("UpperTorso")
                 or tChar:FindFirstChild("LowerTorso")
+                or tChar:FindFirstChild("Head")
                 or tChar:FindFirstChildOfClass("BasePart")
 
             if tMainPart and (not tHum or tHum.Health > 0) then
@@ -733,7 +734,7 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Universal Physics Fling (Instant Detachment & Anti-Void Security)
+    -- 3. Execute 5-Technique Unified Fling Engine
     if targetCharacter and targetPart and targetCharacter.Parent then
         local oldCF = hrp.CFrame
 
@@ -744,7 +745,7 @@ local function performSuperPunch()
         humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
         humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
 
-        -- Temporarily disable limb collisions to prevent Motor6D joint destruction upon impact
+        -- Technique 4: Disable local limb collisions to protect Motor6Ds while keeping HRP active
         local savedCollisions = {}
         for _, part in pairs(char:GetChildren()) do
             if part:IsA("BasePart") then
@@ -755,7 +756,7 @@ local function performSuperPunch()
             end
         end
 
-        -- Health Lock Connection during contact window
+        -- Active Health Lock Connection during contact
         local startHealth = humanoid.Health
         local healthLock = registerConn(RunService.Heartbeat:Connect(function()
             if humanoid and humanoid.Parent then
@@ -765,32 +766,33 @@ local function performSuperPunch()
             end
         end))
 
-        -- 3D Multi-Axis Extreme Rotational Fling (Torque on X, Y, Z for airborne & fast targets)
+        -- Technique 3: 3D Multi-Axis Spinbot Force (MaxTorque on X, Y, Z)
         local bav = Instance.new("BodyAngularVelocity")
         bav.Name = "TuxPunchFlingSpin"
         bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
         bav.AngularVelocity = Vector3.new(999999, 999999, 999999)
         bav.Parent = hrp
 
-        -- Dynamic Contact Window for Running/Jumping targets (Up to 0.25s)
+        -- Fling Phase (Up to 0.22s contact window with Kinematic Lead)
         local startTime = tick()
         local lastTime = startTime
 
-        while tick() - startTime < 0.25 do
+        while tick() - startTime < 0.22 do
             if targetCharacter and targetCharacter.Parent and targetPart and targetPart.Parent then
                 local now = tick()
                 local dt = math.clamp(now - lastTime, 0.001, 0.05)
                 lastTime = now
 
+                local tHum = targetCharacter:FindFirstChildOfClass("Humanoid")
                 local tVel = targetPart.AssemblyLinearVelocity
                 local tSpeed = tVel.Magnitude
 
-                -- Instant detachment if target is flung (speed > 100 studs/s)
+                -- Technique 5: Instant Detachment when target velocity exceeds 100 studs/s
                 if tSpeed > 100 then
                     break
                 end
 
-                -- Force CanCollide & CanTouch on target's primary parts
+                -- Technique 4: Target Part Collision Enforcement on every frame
                 pcall(function()
                     for _, p in pairs(targetCharacter:GetChildren()) do
                         if p:IsA("BasePart") then
@@ -800,11 +802,24 @@ local function performSuperPunch()
                     end
                 end)
 
-                -- 360-degree randomized physics collision overlap (Flings jumping/running targets instantly!)
-                local randAngle = CFrame.Angles(math.rad(math.random(-180, 180)), math.rad(math.random(-180, 180)), math.rad(math.random(-180, 180)))
-                local predictLead = (tSpeed > 1) and (tVel * dt * 2.5) or Vector3.zero
-                
-                hrp.CFrame = (targetPart.CFrame + predictLead) * randAngle
+                -- Technique 2: Kinematic Lead Prediction (Combines AssemblyVelocity + Humanoid MoveDirection)
+                local moveLead = Vector3.zero
+                if tHum and tHum.MoveDirection.Magnitude > 0 then
+                    moveLead = tHum.MoveDirection * (tHum.WalkSpeed or 16) * dt * 2.0
+                end
+                local velLead = (tSpeed > 1) and (tVel * dt * 2.5) or Vector3.zero
+                local totalLead = velLead + moveLead
+
+                -- 360-degree randomized impact angle
+                local randAngle = CFrame.Angles(
+                    math.rad(math.random(-180, 180)),
+                    math.rad(math.random(-180, 180)),
+                    math.rad(math.random(-180, 180))
+                )
+
+                -- Apply 3D AssemblyAngularVelocity directly on HRP alongside BodyAngularVelocity
+                hrp.AssemblyAngularVelocity = Vector3.new(999999, 999999, 999999)
+                hrp.CFrame = (targetPart.CFrame + totalLead) * randAngle
                 hrp.AssemblyLinearVelocity = Vector3.zero
             else
                 break
@@ -816,13 +831,13 @@ local function performSuperPunch()
         bav:Destroy()
         healthLock:Disconnect()
 
-        -- INSTANT VELOCITY RESET & SNAP BACK TO SAFE ORIGINAL POSITION
+        -- Technique 5: 3-Frame Zero-Momentum Home Recovery Anchor
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
         hrp.CFrame = oldCF
 
-        -- Anchor at home position for 2 physics frames to absorb all residual momentum
         hrp.Anchored = true
+        RunService.Heartbeat:Wait()
         RunService.Heartbeat:Wait()
         RunService.Heartbeat:Wait()
 
