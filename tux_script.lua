@@ -789,8 +789,6 @@ local function performSuperPunch()
 
         -- 3. Execute Non-Lethal-To-Self, Anti-Cheat Safe, High-Damage Combo Punch
         if targetCharacter and targetPart and targetCharacter.Parent then
-            local homeCF = hrp.CFrame
-
             -- A. GODMODE & COMPLETE GROUND COLLISION IMMUNITY
             local safeHealth = humanoid.Health
             local godConn = humanoid.HealthChanged:Connect(function(newHealth)
@@ -798,22 +796,6 @@ local function performSuperPunch()
                     pcall(function() humanoid.Health = safeHealth end)
                 end
             end)
-
-            -- Disable fatal humanoid states during punch
-            local origDeadState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead)
-            local origFallingState = humanoid:GetStateEnabled(Enum.HumanoidStateType.FallingDown)
-            local origLandedState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Landed)
-            local origFreefallState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Freefall)
-            local origRagdollState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Ragdoll)
-            local origPhysicsState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Physics)
-
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Landed, false)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
-            humanoid.PlatformStand = true
 
             -- Disable common client-side fall/ragdoll damage scripts
             for _, scriptName in ipairs({"FallDamage", "FallDamageScript", "Fall_Damage", "FallDamage_Client", "RagdollClient", "TouchDamage", "Damage"}) do
@@ -840,7 +822,6 @@ local function performSuperPunch()
 
             -- B. IMMUNITY TO GROUND TOUCHES & SENSORS
             -- Set CanTouch=false on ALL character parts EXCEPT weapon/fist!
-            -- This completely prevents the place's ground fall damage / killbrick Touched scripts from ever firing!
             local origCanTouch = {}
             for _, p in pairs(char:GetDescendants()) do
                 if p:IsA("BasePart") then
@@ -852,8 +833,8 @@ local function performSuperPunch()
                 end
             end
 
-            -- Stepped collision: Complete noclip on all local character parts during punch
-            -- This guarantees our character can NEVER be flung into the stratosphere by physics collision!
+            -- Stepped collision: Complete noclip on local character parts during punch
+            -- Guarantees zero physical pushback, zero collision glitches, zero bounce!
             local noclipConn = RunService.Stepped:Connect(function()
                 if char and char.Parent then
                     for _, p in pairs(char:GetDescendants()) do
@@ -864,9 +845,8 @@ local function performSuperPunch()
                 end
             end)
 
-            -- C. UNIVERSAL HITBOX EXPANSION ON TARGET (Guarantees hits on R6, R15, custom skins/packages)
+            -- C. TARGET HITBOX EXPANSION (Clean 10x10x10 touch box, no collision deformation)
             local origSizes = {}
-            local origCollides = {}
             local origTargetCanTouch = {}
             local targetHitParts = {}
 
@@ -886,25 +866,16 @@ local function performSuperPunch()
 
             for _, p in ipairs(targetHitParts) do
                 origSizes[p] = p.Size
-                origCollides[p] = p.CanCollide
                 origTargetCanTouch[p] = p.CanTouch
                 pcall(function()
-                    p.Size = Vector3.new(20, 20, 20)
-                    p.CanCollide = false -- Keep CanCollide=false to prevent physics explosion ejections!
+                    p.Size = Vector3.new(10, 10, 10)
                     p.CanTouch = true
                 end)
             end
 
-            -- D. DEVASTATING CONTINUOUS COMBO LOOP (0.65s duration for 6-10 full hit cycles)
-            local strikeDuration = 0.65
+            -- D. SNAPPY HIGH-SPEED MULTI-HIT STRIKE LOOP
+            local strikeDuration = 0.45
             local strikeStart = tick()
-
-            -- Raycast parameters to detect floor below target
-            local floorParams = RaycastParams.new()
-            floorParams.FilterType = RaycastFilterType.Exclude
-            floorParams.FilterDescendantsInstances = {char, targetCharacter}
-            floorParams.IgnoreWater = true
-
             local touchCycle = 0
 
             while tick() - strikeStart < strikeDuration do
@@ -913,27 +884,21 @@ local function performSuperPunch()
                 end
 
                 local curTPos = targetPart.Position
-                local curTVel = targetPart.AssemblyLinearVelocity
 
-                -- Detect real ground height below target to guarantee our feet hover safely above the floor
-                local floorRay = Workspace:Raycast(curTPos, Vector3.new(0, -15, 0), floorParams)
-                local floorY = (floorRay and floorRay.Position) and floorRay.Position.Y or (curTPos.Y - 2.8)
-                local safeAttackY = math.max(curTPos.Y + 0.5, floorY + 3.0)
-
-                -- Position ourselves 2.2 studs directly in front of the target, facing them
-                local offsetDir = homeCF.Position - curTPos
-                local offsetXZ = Vector3.new(offsetDir.X, 0, offsetDir.Z)
-                if offsetXZ.Magnitude > 0.1 then
-                    offsetXZ = offsetXZ.Unit
+                -- Compute position 2.5 studs in front of target, facing them at their level
+                local toTarget = curTPos - hrp.Position
+                local horizDir = Vector3.new(toTarget.X, 0, toTarget.Z)
+                if horizDir.Magnitude > 0.1 then
+                    horizDir = horizDir.Unit
                 else
-                    offsetXZ = -targetPart.CFrame.LookVector
+                    horizDir = -targetPart.CFrame.LookVector
                 end
 
-                local attackPos = Vector3.new(curTPos.X + offsetXZ.X * 2.2, safeAttackY, curTPos.Z + offsetXZ.Z * 2.2)
+                local attackPos = Vector3.new(curTPos.X - horizDir.X * 2.5, curTPos.Y, curTPos.Z - horizDir.Z * 2.5)
 
-                -- Stable orientation directly facing the target (no wild centrifuge spinning!)
-                hrp.CFrame = CFrame.lookAt(attackPos, Vector3.new(curTPos.X, safeAttackY, curTPos.Z))
-                hrp.AssemblyLinearVelocity = curTVel
+                -- Stable orientation facing the target, keeping feet grounded and balanced
+                hrp.CFrame = CFrame.lookAt(attackPos, Vector3.new(curTPos.X, attackPos.Y, curTPos.Z))
+                hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
 
                 -- 1. Rapid-Fire Weapon Activation
@@ -996,18 +961,13 @@ local function performSuperPunch()
                 RunService.Heartbeat:Wait()
             end
 
-            -- E. SAFE RESTORATION & RETURN HOME
+            -- E. SAFE RESTORATION - STAY WITH THE TARGET, NO BACKWARD TELEPORT, NO BOUNCE!
             noclipConn:Disconnect()
 
             -- Restore target hitboxes
             for p, size in pairs(origSizes) do
                 if p and p.Parent then
                     pcall(function() p.Size = size end)
-                end
-            end
-            for p, coll in pairs(origCollides) do
-                if p and p.Parent then
-                    pcall(function() p.CanCollide = coll end)
                 end
             end
             for p, tch in pairs(origTargetCanTouch) do
@@ -1023,31 +983,15 @@ local function performSuperPunch()
                 end
             end
 
-            -- Complete velocity neutralization BEFORE teleporting back
+            -- Completely neutralize all velocities: player stays firmly on their feet right here!
             hrp.AssemblyLinearVelocity = Vector3.zero
             hrp.AssemblyAngularVelocity = Vector3.zero
 
-            -- Return slightly elevated above home position
-            hrp.CFrame = homeCF + Vector3.new(0, 0.5, 0)
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-
-            humanoid.PlatformStand = false
-            pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) end)
-
-            -- Keep godmode and state protections active for 0.7s to absorb any ground landing or fall impact
-            task.delay(0.7, function()
+            -- Keep godmode protection active for 0.5s to absorb any counter-attacks
+            task.delay(0.5, function()
                 if godConn then
                     godConn:Disconnect()
                     godConn = nil
-                end
-                if humanoid and humanoid.Parent then
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, origDeadState)
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, origFallingState)
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Landed, origLandedState)
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, origFreefallState)
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, origRagdollState)
-                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, origPhysicsState)
                 end
             end)
         end
