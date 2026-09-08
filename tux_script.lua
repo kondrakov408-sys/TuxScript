@@ -324,9 +324,10 @@ ColumnsFrame.Size = UDim2.new(1, 0, 1, -48)
 ColumnsFrame.Position = UDim2.new(0, 0, 0, 48)
 ColumnsFrame.BackgroundTransparency = 1
 ColumnsFrame.BorderSizePixel = 0
-ColumnsFrame.ScrollBarThickness = 5
+ColumnsFrame.ScrollBarThickness = 6
 ColumnsFrame.ScrollBarImageColor3 = currentTheme.Accent
-ColumnsFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ColumnsFrame.ScrollBarImageTransparency = 0
+ColumnsFrame.CanvasSize = UDim2.new(0, 950, 0, 0) -- Pre-allocated width for 5 columns
 ColumnsFrame.ScrollingDirection = Enum.ScrollingDirection.X
 ColumnsFrame.Active = true
 ColumnsFrame.Selectable = true
@@ -342,7 +343,15 @@ ColumnsLayout.Padding = UDim.new(0, 10)
 ColumnsLayout.VerticalAlignment = Enum.VerticalAlignment.Top
 
 local function updateColumnsCanvas()
-    ColumnsFrame.CanvasSize = UDim2.new(0, ColumnsLayout.AbsoluteContentSize.X + 28, 0, 0)
+    local totalX = 0
+    for _, child in ipairs(ColumnsFrame:GetChildren()) do
+        if child:IsA("GuiObject") and not child:IsA("UIListLayout") then
+            totalX = totalX + child.Size.X.Offset + 10
+        end
+    end
+    local winX = ColumnsFrame.AbsoluteWindowSize.X
+    if winX <= 0 then winX = 600 end
+    ColumnsFrame.CanvasSize = UDim2.new(0, math.max(totalX + 30, winX + 60), 0, 0)
 end
 ColumnsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateColumnsCanvas)
 ColumnsFrame.ChildAdded:Connect(function() task.defer(updateColumnsCanvas) end)
@@ -353,15 +362,38 @@ task.defer(updateColumnsCanvas)
 ---------------------------------------------------------
 local categoryColumns = {}
 
--- Helper to allow mouse wheel scrolling even when hovering directly over buttons/sliders
+-- Bulletproof Scroll Refresh: Guarantees scrollbar is ALWAYS drawn & active
+local function refreshScroll(scroll)
+    if not scroll or not scroll:IsA("ScrollingFrame") then return end
+    local list = scroll:FindFirstChildOfClass("UIListLayout")
+    local pad = list and list.Padding.Offset or 6
+    local totalY = 0
+    for _, child in ipairs(scroll:GetChildren()) do
+        if child:IsA("GuiObject") and not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+            local h = child.Size.Y.Offset
+            if h <= 0 then h = child.AbsoluteSize.Y end
+            if h <= 0 then h = 36 end
+            totalY = totalY + h + pad
+        end
+    end
+    if list and list.AbsoluteContentSize.Y > totalY then
+        totalY = list.AbsoluteContentSize.Y
+    end
+    local winH = scroll.AbsoluteWindowSize.Y
+    if winH <= 0 then winH = 260 end
+    -- Guarantee Canvas is ALWAYS strictly taller than the window by at least 100px so scrollbar NEVER disappears
+    scroll.CanvasSize = UDim2.new(0, 0, 0, math.max(totalY + 36, winH + 100))
+end
+
+-- Helper to allow mouse wheel scrolling anywhere in the column
 local function forwardMouseWheel(guiObj, targetScroll)
     guiObj.InputChanged:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseWheel and targetScroll and targetScroll:IsA("ScrollingFrame") then
-            local delta = input.Position.Z * 42
-            local maxScroll = math.max(0, targetScroll.AbsoluteCanvasSize.Y - targetScroll.AbsoluteWindowSize.Y)
-            if maxScroll > 0 then
-                targetScroll.CanvasPosition = Vector2.new(0, math.clamp(targetScroll.CanvasPosition.Y - delta, 0, maxScroll))
-            end
+            local delta = input.Position.Z * 45
+            local maxScroll = targetScroll.CanvasSize.Y.Offset - targetScroll.AbsoluteWindowSize.Y
+            if maxScroll <= 0 then maxScroll = 400 end
+            local currentY = targetScroll.CanvasPosition.Y
+            targetScroll.CanvasPosition = Vector2.new(0, math.clamp(currentY - delta, 0, maxScroll))
         end
     end)
 end
@@ -406,17 +438,18 @@ local function createCategoryColumn(title, icon, layoutOrder)
     cScroll.Position = UDim2.new(0, 3, 0, 36)
     cScroll.BackgroundTransparency = 1
     cScroll.BorderSizePixel = 0
-    cScroll.ScrollBarThickness = 6
+    cScroll.ScrollBarThickness = 7
     cScroll.ScrollBarImageColor3 = currentTheme.Accent
+    cScroll.ScrollBarImageTransparency = 0
     cScroll.ScrollingDirection = Enum.ScrollingDirection.Y
     cScroll.VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Right
-    cScroll.VerticalScrollBarInset = Enum.ScrollBarInset.None
+    cScroll.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
     cScroll.Active = true
     cScroll.Selectable = true
     cScroll.ScrollingEnabled = true
     cScroll.ClipsDescendants = true
     cScroll.ElasticBehavior = Enum.ElasticBehavior.Always
-    cScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    cScroll.CanvasSize = UDim2.new(0, 0, 0, 600) -- Instant safe Canvas size so scrollbar is drawn immediately
     cScroll.Parent = col
 
     local cLayout = Instance.new("UIListLayout")
@@ -425,18 +458,15 @@ local function createCategoryColumn(title, icon, layoutOrder)
     cLayout.Padding = UDim.new(0, 6)
     cLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-    -- Dynamically ensure CanvasSize ALWAYS expands so all items are 100% scrollable
-    local function updateScrollCanvas()
-        local contentHeight = cLayout.AbsoluteContentSize.Y
-        cScroll.CanvasSize = UDim2.new(0, 0, 0, contentHeight + 28)
-    end
-    cLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateScrollCanvas)
-    cScroll.ChildAdded:Connect(function() task.defer(updateScrollCanvas) end)
-    cScroll.ChildRemoved:Connect(function() task.defer(updateScrollCanvas) end)
-    task.defer(updateScrollCanvas)
+    cLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() refreshScroll(cScroll) end)
+    cScroll.ChildAdded:Connect(function() task.defer(function() refreshScroll(cScroll) end) end)
+    cScroll.ChildRemoved:Connect(function() task.defer(function() refreshScroll(cScroll) end) end)
+    cScroll:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(function() refreshScroll(cScroll) end)
 
-    -- Direct scroll on the background of the column
+    -- Direct scroll on column background and header
     forwardMouseWheel(cScroll, cScroll)
+    forwardMouseWheel(cHeader, cScroll)
+    forwardMouseWheel(col, cScroll)
 
     categoryColumns[title] = cScroll
     return cScroll
@@ -457,12 +487,18 @@ local designScroll  = createCategoryColumn("Design", "🎨", 5)
 local function addModuleToggle(parentScroll, name, defaultState, callback)
     local btn = Instance.new("TextButton")
     btn.Name = name .. "Toggle"
-    btn.Size = UDim2.new(0.93, 0, 0, 34)
+    btn.Size = UDim2.new(0.92, 0, 0, 34)
     btn.BackgroundColor3 = defaultState and currentTheme.Active or Color3.fromRGB(38, 38, 55)
     btn.Text = name
     btn.TextColor3 = defaultState and Color3.fromRGB(17, 17, 27) or currentTheme.Text
     btn.Font = Enum.Font.GothamMedium
     btn.TextSize = 11
+
+    local count = 0
+    for _, c in ipairs(parentScroll:GetChildren()) do
+        if c:IsA("GuiObject") then count = count + 1 end
+    end
+    btn.LayoutOrder = count + 1
     btn.Parent = parentScroll
 
     local corner = Instance.new("UICorner")
@@ -481,14 +517,23 @@ local function addModuleToggle(parentScroll, name, defaultState, callback)
         TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = targetColor, TextColor3 = targetTextColor}):Play()
         callback(state)
     end)
+
+    refreshScroll(parentScroll)
     return btn
 end
 
 -- Create Module Slider
 local function addModuleSlider(parentScroll, name, min, max, defaultVal, callback)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0.93, 0, 0, 46)
+    frame.Name = name .. "Slider"
+    frame.Size = UDim2.new(0.92, 0, 0, 46)
     frame.BackgroundColor3 = Color3.fromRGB(32, 32, 48)
+
+    local count = 0
+    for _, c in ipairs(parentScroll:GetChildren()) do
+        if c:IsA("GuiObject") then count = count + 1 end
+    end
+    frame.LayoutOrder = count + 1
     frame.Parent = parentScroll
 
     local corner = Instance.new("UICorner")
@@ -557,6 +602,9 @@ local function addModuleSlider(parentScroll, name, min, max, defaultVal, callbac
             updateSlider(input)
         end
     end))
+
+    refreshScroll(parentScroll)
+    return frame
 end
 
 ---------------------------------------------------------
@@ -2566,6 +2614,17 @@ end))
 MobileBtn.MouseButton1Click:Connect(function()
     State.GuiVisible = not State.GuiVisible
     MainContainer.Visible = State.GuiVisible
+end)
+
+-- Post-init refresh pass for all category columns to guarantee full scrollability
+task.spawn(function()
+    for _, t in ipairs({0.1, 0.4, 1.0, 2.0}) do
+        task.wait(t)
+        for _, scroll in pairs(categoryColumns) do
+            pcall(function() refreshScroll(scroll) end)
+        end
+        pcall(function() refreshColumnsFrame() end)
+    end
 end)
 
 print("Tux Script 🐧 Mobile & PC Minecraft GUI initialized successfully!")
