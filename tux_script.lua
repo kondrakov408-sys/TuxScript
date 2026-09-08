@@ -384,10 +384,10 @@ SettingsPadding.Parent = SettingsPanel
 
 -- Mode Buttons in Settings Panel
 local modesList = {
-    {id = "Combined", label = "Mode: AC-Safe Combo 🔥"},
-    {id = "Impulser", label = "Mode 1: Rotor Spin Fling 🌀"},
-    {id = "Spin", label = "Mode 2: Angular Sweep Fling ⚡"},
-    {id = "Direct", label = "Mode 3: Linear Push Dash 💨"}
+    {id = "Combined", label = "Mode: Protected Super Fling 🔥"},
+    {id = "Impulser", label = "Mode 1: Rotor Spin Proxy 🌀"},
+    {id = "Spin", label = "Mode 2: Orbital Sweep Proxy ⚡"},
+    {id = "Direct", label = "Mode 3: Touch Surge Proxy 💨"}
 }
 
 local modeButtons = {}
@@ -436,7 +436,7 @@ SettingsArrowBtn.MouseButton1Click:Connect(function()
 end)
 
 ---------------------------------------------------------
--- ANTI-CHEAT SAFE FLING ENGINE (No AC Ban / Void Kill)
+-- NO-DEATH PROTECTED PROXY FLING ENGINE
 ---------------------------------------------------------
 local isPunching = false
 local function performSuperPunch()
@@ -449,7 +449,7 @@ local function performSuperPunch()
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not humanoid then isPunching = false; return end
 
-    -- 1. Visual Arm Swing Animation
+    -- 1. Visual Arm Swing Animation (Local Player stays completely safe)
     task.spawn(function()
         pcall(function()
             local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
@@ -470,7 +470,7 @@ local function performSuperPunch()
 
     -- 2. Detect Closest Target Player
     local targetHrp = nil
-    local closestDist = 45
+    local closestDist = 50
 
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
@@ -485,126 +485,69 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Anti-Cheat Safe Fling
+    -- 3. Execute Character-Replicated Protected Fling Proxy
     if targetHrp then
-        local origCF = hrp.CFrame
         local pushDir = (targetHrp.Position - hrp.Position).Unit
         if pushDir ~= pushDir then pushDir = hrp.CFrame.LookVector end
         local mode = State.PunchMode
 
-        -- Save & Protect States
-        local origDeadState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-        humanoid.PlatformStand = true
+        -- Create Fling Proxy Part INSIDE Local Character (Replicates to Server!)
+        local flingPart = Instance.new("Part")
+        flingPart.Name = "TuxFlingProxy"
+        flingPart.Size = Vector3.new(6, 6, 6)
+        flingPart.Transparency = 1
+        flingPart.CanCollide = true
+        flingPart.CanTouch = true
+        flingPart.Massless = true
+        flingPart.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 100, 100, 100)
+        flingPart.CFrame = targetHrp.CFrame
+        flingPart.Parent = char
 
-        -- Anti-Cheat Thresholds (Limits Velocity & Angular speed to stay under AC detection threshold)
-        local safeAngular = 12000 -- 12k RPM is optimal for fling torque without triggering Anti-Cheat kill
-        local safeLinear = 1200
+        -- Attach NoCollisionConstraint to 100% ISOLATE LocalPlayer from Fling Recoil & Damage!
+        for _, part in pairs(char:GetDescendants()) do
+            if part:IsA("BasePart") and part ~= flingPart then
+                local ncc = Instance.new("NoCollisionConstraint")
+                ncc.Part0 = flingPart
+                ncc.Part1 = part
+                ncc.Parent = flingPart
+            end
+        end
 
-        -- Disable limb collisions so limbs don't trip
-        for _, part in pairs(char:GetChildren()) do
-            if part:IsA("BasePart") then
-                if part.Name == "HumanoidRootPart" then
-                    part.CanCollide = true
+        -- Add Extreme Angular Velocity & Velocity Forces to Proxy Part
+        local bav = Instance.new("BodyAngularVelocity")
+        bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bav.AngularVelocity = Vector3.new(999999, 999999, 999999)
+        bav.Parent = flingPart
+
+        local bv = Instance.new("BodyVelocity")
+        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bv.Velocity = (pushDir * 7000) + Vector3.new(0, 3000, 0)
+        bv.Parent = flingPart
+
+        -- Fling Impact Loop (Target takes 100% of hit, LocalPlayer stays 100% safe!)
+        local startTime = tick()
+        local angle = 0
+        while tick() - startTime < 0.25 do
+            angle = angle + 120
+            if targetHrp and targetHrp.Parent then
+                if mode == "Spin" or mode == "Combined" then
+                    flingPart.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(angle), 0)
                 else
-                    part.CanCollide = false
+                    flingPart.CFrame = targetHrp.CFrame
                 end
+
+                pcall(function()
+                    if firetouchinterest then
+                        firetouchinterest(flingPart, targetHrp, 0)
+                        firetouchinterest(flingPart, targetHrp, 1)
+                    end
+                end)
             end
+            RunService.Heartbeat:Wait()
         end
 
-        if mode == "Impulser" then
-            local bav = Instance.new("BodyAngularVelocity")
-            bav.Name = "TuxRotorFling"
-            bav.MaxTorque = Vector3.new(0, math.huge, 0)
-            bav.AngularVelocity = Vector3.new(0, safeAngular, 0)
-            bav.Parent = hrp
-
-            local startTime = tick()
-            while tick() - startTime < 0.15 do
-                if targetHrp and targetHrp.Parent then
-                    hrp.CFrame = targetHrp.CFrame
-                    hrp.AssemblyLinearVelocity = pushDir * safeLinear
-                end
-                RunService.Heartbeat:Wait()
-            end
-            bav:Destroy()
-
-        elseif mode == "Spin" then
-            local bav = Instance.new("BodyAngularVelocity")
-            bav.MaxTorque = Vector3.new(0, math.huge, 0)
-            bav.AngularVelocity = Vector3.new(0, safeAngular, 0)
-            bav.Parent = hrp
-
-            local startTime = tick()
-            local angle = 0
-            while tick() - startTime < 0.15 do
-                angle = angle + 90
-                if targetHrp and targetHrp.Parent then
-                    hrp.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(angle), 0)
-                end
-                RunService.Heartbeat:Wait()
-            end
-            bav:Destroy()
-
-        elseif mode == "Direct" then
-            local bv = Instance.new("BodyVelocity")
-            bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            bv.Velocity = (pushDir * safeLinear) + Vector3.new(0, 400, 0)
-            bv.Parent = hrp
-
-            local startTime = tick()
-            while tick() - startTime < 0.15 do
-                if targetHrp and targetHrp.Parent then
-                    hrp.CFrame = targetHrp.CFrame
-                end
-                RunService.Heartbeat:Wait()
-            end
-            bv:Destroy()
-
-        else -- Mode: AC-Safe Combo
-            local bav = Instance.new("BodyAngularVelocity")
-            bav.MaxTorque = Vector3.new(0, math.huge, 0)
-            bav.AngularVelocity = Vector3.new(0, safeAngular, 0)
-            bav.Parent = hrp
-
-            local startTime = tick()
-            local angle = 0
-            while tick() - startTime < 0.15 do
-                angle = angle + 90
-                if targetHrp and targetHrp.Parent then
-                    hrp.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(angle), 0)
-                    hrp.AssemblyLinearVelocity = (pushDir * safeLinear) + Vector3.new(0, 300, 0)
-                end
-                RunService.Heartbeat:Wait()
-            end
-            bav:Destroy()
-        end
-
-        ---------------------------------------------------------
-        -- ANCHOR ANTI-DEATH RESTORATION ENGINE
-        ---------------------------------------------------------
-        hrp.Anchored = true
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        hrp.CFrame = origCF
-
-        RunService.Heartbeat:Wait()
-
-        hrp.Anchored = false
-        humanoid.PlatformStand = false
-        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-
-        for _, part in pairs(char:GetChildren()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = true
-            end
-        end
-
-        task.delay(0.6, function()
-            if humanoid and humanoid.Parent then
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, origDeadState)
-            end
-        end)
+        -- Destroy Fling Proxy Part cleanly
+        flingPart:Destroy()
     end
 
     task.wait(0.15)
