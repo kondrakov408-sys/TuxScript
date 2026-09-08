@@ -670,238 +670,267 @@ registerConn(UserInputService.InputChanged:Connect(function(input)
     end
 end))
 
--- AUTHENTIC REPLICATED SUPER PUNCH FLING (Instant Detachment & Anti-Void Protection)
+-- Forward declaration for Tux Pet cheer reaction
+local onTuxCheer = nil
+
+-- AUTHENTIC REPLICATED SUPER PUNCH FLING (Rock-Solid Physics Impact & Target Launch)
 local isPunching = false
 local function performSuperPunch()
     if isPunching then return end
     isPunching = true
 
-    local char = LocalPlayer.Character
-    if not char then isPunching = false; return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not humanoid then isPunching = false; return end
+    local success, err = pcall(function()
+        local char = LocalPlayer.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart or char:FindFirstChild("Torso")
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not humanoid or humanoid.Health <= 0 then return end
 
-    -- 1. Single-Play Arm Swing Animation (No Looping!)
-    task.spawn(function()
-        pcall(function()
-            local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
-            local anim = Instance.new("Animation")
-            anim.AnimationId = char:FindFirstChild("UpperTorso") and "rbxassetid://507770453" or "rbxassetid://125750799"
-            local track = animator:LoadAnimation(anim)
-            track.Looped = false
-            track:Play(0.05, 1, 2.5)
-            task.delay(0.35, function()
-                pcall(function() track:Stop() end)
+        -- Trigger companion pet reaction!
+        if onTuxCheer then
+            pcall(onTuxCheer)
+        end
+
+        -- 1. Arm Swing Animation (Single-play, clean stop)
+        task.spawn(function()
+            pcall(function()
+                local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+                local anim = Instance.new("Animation")
+                anim.AnimationId = char:FindFirstChild("UpperTorso") and "rbxassetid://507770453" or "rbxassetid://125750799"
+                local track = animator:LoadAnimation(anim)
+                track.Looped = false
+                track:Play(0.05, 1, 2.5)
+                task.delay(0.35, function()
+                    pcall(function() track:Stop() end)
+                end)
             end)
+
+            local shoulder = char:FindFirstChild("Right Shoulder", true) or char:FindFirstChild("RightShoulder", true)
+            if shoulder then
+                local origC0 = shoulder.C0
+                shoulder.C0 = origC0 * CFrame.Angles(math.rad(110), math.rad(-30), 0)
+                task.wait(0.25)
+                shoulder.C0 = origC0
+            end
         end)
 
-        local shoulder = char:FindFirstChild("Right Shoulder", true) or char:FindFirstChild("RightShoulder", true)
-        if shoulder then
-            local origC0 = shoulder.C0
-            shoulder.C0 = origC0 * CFrame.Angles(math.rad(110), math.rad(-30), 0)
-            task.wait(0.25)
-            shoulder.C0 = origC0
+        -- 2. Detect Target Player (Aim-First Mouse Target + Universal Avatar Scanner)
+        local targetCharacter = nil
+        local targetPart = nil
+        local maxPunchDist = 110
+        local closestDist = maxPunchDist
+
+        -- Universal rig scanner: finds the solid torso/core with active collision
+        local function getTargetRoot(character)
+            if not character then return nil end
+            return character:FindFirstChild("Torso")
+                or character:FindFirstChild("UpperTorso")
+                or character:FindFirstChild("HumanoidRootPart")
+                or character:FindFirstChild("LowerTorso")
+                or character:FindFirstChild("Head")
+                or (character.PrimaryPart and character.PrimaryPart:IsA("BasePart") and character.PrimaryPart)
+                or character:FindFirstChildWhichIsA("BasePart")
         end
-    end)
 
-    -- 2. Detect Target Player (Aim-First Mouse Target + Universal Avatar Scanner)
-    local targetCharacter = nil
-    local targetPart = nil
-    local maxPunchDist = 85 -- Safe distance to prevent Anti-Cheat speed/teleport detections
-    local closestDist = maxPunchDist
-
-    -- Universal rig part detector (R6, R15, custom skins, bundles, mesh rigs)
-    local function getTargetRoot(character)
-        if not character then return nil end
-        -- Prioritize central torso parts that have solid collisions in R6 & R15
-        return character:FindFirstChild("Torso")
-            or character:FindFirstChild("UpperTorso")
-            or character:FindFirstChild("HumanoidRootPart")
-            or character:FindFirstChild("LowerTorso")
-            or character:FindFirstChild("Head")
-            or (character.PrimaryPart and character.PrimaryPart:IsA("BasePart") and character.PrimaryPart)
-            or character:FindFirstChildWhichIsA("BasePart")
-    end
-
-    -- Priority 1: Aiming directly at a player with Mouse
-    if Mouse.Target then
-        local mChar = Mouse.Target.Parent
-        if mChar and not mChar:FindFirstChildOfClass("Humanoid") and mChar.Parent then
-            mChar = mChar.Parent
-        end
-        local mPlayer = Players:GetPlayerFromCharacter(mChar)
-        if mPlayer and mPlayer ~= LocalPlayer and mChar then
-            local mHum = mChar:FindFirstChildOfClass("Humanoid")
-            local mRoot = getTargetRoot(mChar)
-            if mRoot and (not mHum or mHum.Health > 0) then
-                local dist = (mRoot.Position - hrp.Position).Magnitude
-                if dist <= maxPunchDist then
-                    targetCharacter = mChar
-                    targetPart = mRoot
-                end
+        -- Priority 1: Aiming directly at a player with Mouse
+        if Mouse.Target then
+            local mChar = Mouse.Target.Parent
+            if mChar and not mChar:FindFirstChildOfClass("Humanoid") and mChar.Parent then
+                mChar = mChar.Parent
             end
-        end
-    end
-
-    -- Priority 2: Closest Player within safe melee range
-    if not targetCharacter then
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-                local tChar = player.Character
-                local tHum = tChar:FindFirstChildOfClass("Humanoid")
-                local tMainPart = getTargetRoot(tChar)
-
-                if tMainPart and (not tHum or tHum.Health > 0) then
-                    local dist = (tMainPart.Position - hrp.Position).Magnitude
-                    if dist < closestDist then
-                        closestDist = dist
-                        targetCharacter = tChar
-                        targetPart = tMainPart
+            local mPlayer = Players:GetPlayerFromCharacter(mChar)
+            if mPlayer and mPlayer ~= LocalPlayer and mChar then
+                local mHum = mChar:FindFirstChildOfClass("Humanoid")
+                local mRoot = getTargetRoot(mChar)
+                if mRoot and (not mHum or mHum.Health > 0) then
+                    local dist = (mRoot.Position - hrp.Position).Magnitude
+                    if dist <= maxPunchDist then
+                        targetCharacter = mChar
+                        targetPart = mRoot
                     end
                 end
             end
         end
-    end
 
-    -- 3. True Skid Fling Engine (Anti-Death, Anti-Cheat Safe, Lead-Ramming)
-    if targetCharacter and targetPart and targetCharacter.Parent then
-        local homeCF = hrp.CFrame
+        -- Priority 2: Closest Player within range
+        if not targetCharacter then
+            for _, player in pairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character then
+                    local tChar = player.Character
+                    local tHum = tChar:FindFirstChildOfClass("Humanoid")
+                    local tMainPart = getTargetRoot(tChar)
 
-        -- 1. Anti-Death & State Protection
-        local origDeadState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead)
-        local origFallingState = humanoid:GetStateEnabled(Enum.HumanoidStateType.FallingDown)
-        local origRagdollState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Ragdoll)
-        local origPhysicsState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Physics)
-
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
-        humanoid.PlatformStand = true
-
-        -- Disable common in-game fall damage & touch damage localscripts
-        for _, scriptName in ipairs({"FallDamage", "FallDamageScript", "Fall_Damage", "FallDamage_Client", "RagdollClient", "TouchDamage"}) do
-            pcall(function()
-                local s = char:FindFirstChild(scriptName) or (LocalPlayer:FindFirstChild("PlayerScripts") and LocalPlayer.PlayerScripts:FindFirstChild(scriptName))
-                if s and s:IsA("LocalScript") then
-                    s.Disabled = true
+                    if tMainPart and (not tHum or tHum.Health > 0) then
+                        local dist = (tMainPart.Position - hrp.Position).Magnitude
+                        if dist < closestDist then
+                            closestDist = dist
+                            targetCharacter = tChar
+                            targetPart = tMainPart
+                        end
+                    end
                 end
-            end)
+            end
         end
 
-        -- 2. Prevent Ground & Touch Damage (NoClip + CanTouch = false on all limbs)
-        local origProperties = {}
-        local origCanTouch = {}
-        for _, p in pairs(char:GetDescendants()) do
-            if p:IsA("BasePart") then
-                origProperties[p] = p.CustomPhysicalProperties
-                origCanTouch[p] = p.CanTouch
+        -- 3. Robust Physics Launch Fling Engine
+        if targetCharacter and targetPart and targetCharacter.Parent then
+            local homeCF = hrp.CFrame
+            local punchDir = (targetPart.Position - homeCF.Position).Unit
+            if punchDir.Magnitude < 0.1 then
+                punchDir = homeCF.LookVector
+            end
+
+            -- 1. Anti-Death & State Protection
+            local origDeadState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead)
+            local origFallingState = humanoid:GetStateEnabled(Enum.HumanoidStateType.FallingDown)
+            local origRagdollState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Ragdoll)
+            local origPhysicsState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Physics)
+
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+            humanoid.PlatformStand = true
+
+            -- Disable common fall damage & touch damage localscripts
+            for _, scriptName in ipairs({"FallDamage", "FallDamageScript", "Fall_Damage", "FallDamage_Client", "RagdollClient", "TouchDamage"}) do
                 pcall(function()
-                    p.CustomPhysicalProperties = PhysicalProperties.new(100, 0.3, 0.5) -- High mass
-                    if p ~= hrp then
-                        p.CanTouch = false -- Prevent .Touched damage from ground/traps
+                    local s = char:FindFirstChild(scriptName) or (LocalPlayer:FindFirstChild("PlayerScripts") and LocalPlayer.PlayerScripts:FindFirstChild(scriptName))
+                    if s and s:IsA("LocalScript") then
+                        s.Disabled = true
                     end
                 end)
             end
-        end
 
-        -- Continuous Stepped NoClip: Absolutely NO collision with ground, terrain, or map
-        local noclipConn = RunService.Stepped:Connect(function()
-            if char and char.Parent then
-                for _, p in pairs(char:GetDescendants()) do
-                    if p:IsA("BasePart") then
-                        p.CanCollide = false
-                    end
+            -- 2. Physical Density & Ground Touch Immunity
+            local origProperties = {}
+            local origCanTouch = {}
+            for _, p in pairs(char:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    origProperties[p] = p.CustomPhysicalProperties
+                    origCanTouch[p] = p.CanTouch
+                    pcall(function()
+                        p.CustomPhysicalProperties = PhysicalProperties.new(100, 0.5, 0.5)
+                        if p ~= hrp then
+                            p.CanTouch = false
+                        end
+                    end)
                 end
             end
-        end)
 
-        -- 3. Controlled High-Torque Spin (Safe within Anti-Cheat limits, but lethal mass)
-        local bav = Instance.new("BodyAngularVelocity")
-        bav.Name = "TuxPunchBAM"
-        bav.MaxTorque = Vector3.new(0, math.huge, 0)
-        bav.AngularVelocity = Vector3.new(0, 3500, 0) -- Safe rotational threshold
-        bav.P = math.huge
-        bav.Parent = hrp
+            -- Continuous Stepped Collision: HRP CanCollide=true for real physics impact,
+            -- all other limbs CanCollide=false so legs NEVER collide with the floor!
+            local noclipConn = RunService.Stepped:Connect(function()
+                if char and char.Parent then
+                    for _, p in pairs(char:GetDescendants()) do
+                        if p:IsA("BasePart") then
+                            if p == hrp then
+                                p.CanCollide = true
+                            else
+                                p.CanCollide = false
+                            end
+                        end
+                    end
+                end
+            end)
 
-        -- 4. Target Tracking & Kinetic Ramming Loop
-        local duration = 0.38
-        local startTime = tick()
+            -- BodyAngularVelocity torque twist on HRP
+            local bav = Instance.new("BodyAngularVelocity")
+            bav.Name = "TuxPunchBAM"
+            bav.MaxTorque = Vector3.new(0, math.huge, 0)
+            bav.AngularVelocity = Vector3.new(0, 18000, 0)
+            bav.P = math.huge
+            bav.Parent = hrp
 
-        while tick() - startTime < duration do
-            if not targetCharacter or not targetCharacter.Parent or not targetPart or not targetPart.Parent then
-                break
+            -- Trigger any equipped combat tools (swords, fists, melee) for in-game hit registration
+            for _, item in pairs(char:GetChildren()) do
+                if item:IsA("Tool") then
+                    pcall(function() item:Activate() end)
+                end
             end
 
-            local tPos = targetPart.Position
-            local tVel = targetPart.AssemblyLinearVelocity
+            -- 4. Target Tracking & Kinetic Ramming Loop
+            local duration = 0.35
+            local startTime = tick()
 
-            -- Kinematic Lead: match velocity so moving targets can NEVER outrun the punch
-            local lead = (tVel.Magnitude > 1) and (tVel * 0.035) or Vector3.zero
-            local targetPos = tPos + lead
+            while tick() - startTime < duration do
+                if not targetCharacter or not targetCharacter.Parent or not targetPart or not targetPart.Parent then
+                    break
+                end
 
-            -- Safe height: ensure HRP never clips below ground level
-            local safeY = math.max(targetPos.Y, 2.8)
-            local cycle = (tick() % 0.08 > 0.04) and 0.2 or -0.2
-            local attackCFrame = CFrame.new(targetPos.X, safeY + cycle, targetPos.Z) * CFrame.Angles(0, math.rad(tick() * 1500 % 360), 0)
+                local tPos = targetPart.Position
+                local tVel = targetPart.AssemblyLinearVelocity
 
-            hrp.CFrame = attackCFrame
+                -- Kinematic Lead: always position right on target with velocity anticipation
+                local lead = (tVel.Magnitude > 1) and (tVel * 0.035) or Vector3.zero
+                local targetCenter = tPos + lead
 
-            -- Ramming impulse: local velocity pushes into the target's movement vector
-            local ramVel = (tVel.Magnitude > 1) and (tVel + tVel.Unit * 60) or Vector3.new(0, 30, 0)
-            -- Cap velocity to 180 to guarantee no Anti-Cheat speed/velocity flags
-            if ramVel.Magnitude > 180 then
-                ramVel = ramVel.Unit * 180
+                -- Ensure HRP stays at target's chest level, avoiding ground
+                local safeY = math.max(targetCenter.Y, 3.0)
+                local cycle = (tick() % 0.06 > 0.03) and 0.2 or -0.2
+                local attackCFrame = CFrame.new(targetCenter.X, safeY + cycle, targetCenter.Z) * CFrame.Angles(0, math.rad(tick() * 2500 % 360), 0)
+
+                hrp.CFrame = attackCFrame
+
+                -- Forward & upward ramming velocity that launches target violently into the air
+                local ramVel = (tVel.Magnitude > 1) and (tVel + punchDir * 320 + Vector3.new(0, 180, 0)) or (punchDir * 320 + Vector3.new(0, 200, 0))
+                hrp.AssemblyLinearVelocity = ramVel
+
+                -- Break early if target speed exceeds launch threshold
+                if tVel.Magnitude > 160 then
+                    break
+                end
+
+                RunService.Heartbeat:Wait()
             end
-            hrp.AssemblyLinearVelocity = ramVel
 
-            -- Detach early if target got launched
-            if tVel.Magnitude > 180 then
-                break
+            -- 5. Safe Cleanup & Home Recovery
+            bav:Destroy()
+            noclipConn:Disconnect()
+
+            -- Restore original physical properties & CanTouch
+            for p, prop in pairs(origProperties) do
+                if p and p.Parent then
+                    pcall(function() p.CustomPhysicalProperties = prop end)
+                end
+            end
+            for p, touch in pairs(origCanTouch) do
+                if p and p.Parent then
+                    pcall(function() p.CanTouch = touch end)
+                end
             end
 
+            -- Zero velocities completely before returning home
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            hrp.CFrame = homeCF
+
+            -- Anchor freeze for 1 frame to ensure zero leftover momentum
+            hrp.Anchored = true
             RunService.Heartbeat:Wait()
+            hrp.Anchored = false
+
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            hrp.CFrame = homeCF
+
+            task.wait(0.04)
+            humanoid.PlatformStand = false
+
+            -- Restore Humanoid states
+            task.delay(0.2, function()
+                if humanoid and humanoid.Parent then
+                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, origDeadState)
+                    humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, origFallingState)
+                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, origRagdollState)
+                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, origPhysicsState)
+                end
+            end)
         end
+    end)
 
-        -- 5. Safe Cleanup & Home Recovery
-        bav:Destroy()
-        noclipConn:Disconnect()
-
-        -- Restore original physical properties & CanTouch
-        for p, prop in pairs(origProperties) do
-            if p and p.Parent then
-                pcall(function() p.CustomPhysicalProperties = prop end)
-            end
-        end
-        for p, touch in pairs(origCanTouch) do
-            if p and p.Parent then
-                pcall(function() p.CanTouch = touch end)
-            end
-        end
-
-        -- Velocity Nullification & Smooth Home Return
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        hrp.CFrame = homeCF
-
-        RunService.Heartbeat:Wait()
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        hrp.CFrame = homeCF
-
-        task.wait(0.05)
-        humanoid.PlatformStand = false
-
-        -- Restore Humanoid states safely
-        task.delay(0.2, function()
-            if humanoid and humanoid.Parent then
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, origDeadState)
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, origFallingState)
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, origRagdollState)
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, origPhysicsState)
-            end
-        end)
+    if not success and err then
+        warn("TuxScript Super Punch Error: " .. tostring(err))
     end
 
     task.wait(0.1)
@@ -986,44 +1015,486 @@ registerConn(UserInputService.InputBegan:Connect(function(input, gpe)
     end
 end))
 
--- Tux Companion Pet
+-- =========================================================
+-- SMART 3D TUX PENGUIN COMPANION PET 🐧
+-- Fully procedural 3D chibi model with ground raycasting,
+-- real waddling physics, high-speed belly-sliding on ice,
+-- sleeping Zzz, click-to-pet backflip & punch cheering!
+-- =========================================================
 local petModel = nil
+local petLoopConn = nil
+local petClickConn = nil
+
+local function cleanupTuxPet()
+    if petLoopConn then
+        petLoopConn:Disconnect()
+        petLoopConn = nil
+    end
+    if petClickConn then
+        petClickConn:Disconnect()
+        petClickConn = nil
+    end
+    if petModel then
+        petModel:Destroy()
+        petModel = nil
+    end
+    onTuxCheer = nil
+end
+
+local function spawnSmartTuxPet()
+    cleanupTuxPet()
+
+    local char = LocalPlayer.Character
+    if not char then return end
+    local playerHrp = char:FindFirstChild("HumanoidRootPart")
+    if not playerHrp then return end
+
+    -- Container model
+    petModel = Instance.new("Model")
+    petModel.Name = "TuxSmartPet"
+    petModel.Parent = Workspace
+    registerInst(petModel)
+
+    -- Invisible root
+    local root = Instance.new("Part")
+    root.Name = "PetRoot"
+    root.Size = Vector3.new(1.4, 2.0, 1.3)
+    root.Transparency = 1
+    root.CanCollide = false
+    root.CanTouch = false
+    root.CanQuery = false
+    root.Massless = true
+    root.Anchored = true
+    root.CFrame = playerHrp.CFrame * CFrame.new(2.5, 0, 3)
+    root.Parent = petModel
+    petModel.PrimaryPart = root
+
+    -- Helper to create welded parts with SpecialMesh
+    local function addMeshPart(name, size, color, c0, meshType, meshScale, material)
+        local p = Instance.new("Part")
+        p.Name = name
+        p.Size = size
+        p.Color = color
+        p.Material = material or Enum.Material.SmoothPlastic
+        p.CanCollide = false
+        p.CanTouch = false
+        p.CanQuery = false
+        p.Massless = true
+        p.CastShadow = false
+        p.Parent = petModel
+
+        if meshType then
+            local m = Instance.new("SpecialMesh")
+            m.MeshType = meshType
+            if meshScale then
+                m.Scale = meshScale
+            end
+            m.Parent = p
+        end
+
+        local motor = Instance.new("Motor6D")
+        motor.Name = name .. "Joint"
+        motor.Part0 = root
+        motor.Part1 = p
+        motor.C0 = c0 or CFrame.new()
+        motor.C1 = CFrame.new()
+        motor.Parent = root
+        return p, motor
+    end
+
+    -- Color palette for classic Tux
+    local colBlack = Color3.fromRGB(24, 26, 36)
+    local colWhite = Color3.fromRGB(246, 248, 252)
+    local colOrange = Color3.fromRGB(255, 145, 0)
+    local colBowtie = Color3.fromRGB(235, 45, 60)
+    local colEyePupil = Color3.fromRGB(15, 15, 20)
+
+    -- 1. Chubby Body (Torso)
+    local bodyPart, bodyJoint = addMeshPart("Body", Vector3.new(1.3, 1.45, 1.15), colBlack,
+        CFrame.new(0, 0, 0), Enum.MeshType.Sphere)
+
+    -- 2. White Belly Tummy
+    local bellyPart, bellyJoint = addMeshPart("Belly", Vector3.new(0.95, 1.15, 0.45), colWhite,
+        CFrame.new(0, -0.05, -0.42), Enum.MeshType.Sphere)
+
+    -- 3. Round Chibi Head
+    local headBaseC0 = CFrame.new(0, 0.95, 0)
+    local headPart, headJoint = addMeshPart("Head", Vector3.new(1.15, 1.0, 1.1), colBlack,
+        headBaseC0, Enum.MeshType.Sphere)
+
+    -- 4. Big Expressive Eyes (Left & Right Whites and Pupils)
+    local leftEyeWhite, _ = addMeshPart("LeftEyeWhite", Vector3.new(0.28, 0.32, 0.12), colWhite,
+        CFrame.new(-0.24, 1.05, -0.48), Enum.MeshType.Sphere)
+    local leftEyePupil, _ = addMeshPart("LeftEyePupil", Vector3.new(0.14, 0.18, 0.08), colEyePupil,
+        CFrame.new(-0.24, 1.05, -0.53), Enum.MeshType.Sphere)
+
+    local rightEyeWhite, _ = addMeshPart("RightEyeWhite", Vector3.new(0.28, 0.32, 0.12), colWhite,
+        CFrame.new(0.24, 1.05, -0.48), Enum.MeshType.Sphere)
+    local rightEyePupil, _ = addMeshPart("RightEyePupil", Vector3.new(0.14, 0.18, 0.08), colEyePupil,
+        CFrame.new(0.24, 1.05, -0.53), Enum.MeshType.Sphere)
+
+    -- 5. Orange Beak
+    local beakBaseC0 = CFrame.new(0, 0.88, -0.62) * CFrame.Angles(math.rad(10), 0, 0)
+    local beakPart, beakJoint = addMeshPart("Beak", Vector3.new(0.36, 0.22, 0.45), colOrange,
+        beakBaseC0, Enum.MeshType.Wedge)
+
+    -- 6. Cute Red Bowtie
+    local bowtieCenter, _ = addMeshPart("BowtieCenter", Vector3.new(0.16, 0.16, 0.14), colBowtie,
+        CFrame.new(0, 0.48, -0.52), Enum.MeshType.Brick)
+    local bowtieLeft, _ = addMeshPart("BowtieLeft", Vector3.new(0.26, 0.2, 0.1), colBowtie,
+        CFrame.new(-0.16, 0.48, -0.52) * CFrame.Angles(0, 0, math.rad(15)), Enum.MeshType.Wedge)
+    local bowtieRight, _ = addMeshPart("BowtieRight", Vector3.new(0.26, 0.2, 0.1), colBowtie,
+        CFrame.new(0.16, 0.48, -0.52) * CFrame.Angles(0, 0, math.rad(-15)), Enum.MeshType.Wedge)
+
+    -- 7. Flippers / Wings
+    local leftWingBaseC0 = CFrame.new(-0.72, 0.18, 0) * CFrame.Angles(0, 0, math.rad(-14))
+    local leftWingPart, leftWingJoint = addMeshPart("LeftWing", Vector3.new(0.22, 0.85, 0.45), colBlack,
+        leftWingBaseC0, Enum.MeshType.Sphere)
+
+    local rightWingBaseC0 = CFrame.new(0.72, 0.18, 0) * CFrame.Angles(0, 0, math.rad(14))
+    local rightWingPart, rightWingJoint = addMeshPart("RightWing", Vector3.new(0.22, 0.85, 0.45), colBlack,
+        rightWingBaseC0, Enum.MeshType.Sphere)
+
+    -- 8. Webbed Orange Feet
+    local leftFootBaseC0 = CFrame.new(-0.34, -0.85, -0.1)
+    local leftFootPart, leftFootJoint = addMeshPart("LeftFoot", Vector3.new(0.42, 0.16, 0.65), colOrange,
+        leftFootBaseC0, Enum.MeshType.Sphere)
+
+    local rightFootBaseC0 = CFrame.new(0.34, -0.85, -0.1)
+    local rightFootPart, rightFootJoint = addMeshPart("RightFoot", Vector3.new(0.42, 0.16, 0.65), colOrange,
+        rightFootBaseC0, Enum.MeshType.Sphere)
+
+    -- 9. Cute Penguin Tail
+    local tailPart, _ = addMeshPart("Tail", Vector3.new(0.35, 0.2, 0.35), colBlack,
+        CFrame.new(0, -0.45, 0.55) * CFrame.Angles(math.rad(-25), 0, 0), Enum.MeshType.Wedge)
+
+    -- 10. Sliding Particles Emitter (Snow / Ice spray)
+    local slideEmitter = Instance.new("ParticleEmitter")
+    slideEmitter.Name = "IceSlideParticles"
+    slideEmitter.Texture = "rbxasset://textures/particles/smoke_main.dds"
+    slideEmitter.Color = ColorSequence.new(Color3.fromRGB(240, 248, 255))
+    slideEmitter.Size = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.35),
+        NumberSequenceKeypoint.new(1, 0.85)
+    })
+    slideEmitter.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.4),
+        NumberSequenceKeypoint.new(1, 1)
+    })
+    slideEmitter.Lifetime = NumberRange.new(0.25, 0.45)
+    slideEmitter.Rate = 25
+    slideEmitter.Speed = NumberRange.new(2, 4)
+    slideEmitter.SpreadAngle = Vector2.new(45, 45)
+    slideEmitter.Enabled = false
+    slideEmitter.Parent = root
+
+    -- 11. Overhead Glassmorphic Status Badge
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "PetBadge"
+    billboard.Size = UDim2.new(0, 160, 0, 44)
+    billboard.StudsOffset = Vector3.new(0, 2.35, 0)
+    billboard.AlwaysOnTop = true
+    billboard.MaxDistance = 55
+    billboard.Adornee = root
+    billboard.Parent = petModel
+
+    local badgeFrame = Instance.new("Frame")
+    badgeFrame.Size = UDim2.new(1, 0, 1, 0)
+    badgeFrame.BackgroundColor3 = Color3.fromRGB(16, 18, 28)
+    badgeFrame.BackgroundTransparency = 0.25
+    badgeFrame.BorderSizePixel = 0
+    badgeFrame.Parent = billboard
+
+    local badgeCorner = Instance.new("UICorner")
+    badgeCorner.CornerRadius = UDim.new(0, 8)
+    badgeCorner.Parent = badgeFrame
+
+    local badgeStroke = Instance.new("UIStroke")
+    badgeStroke.Color = currentTheme.Accent or Color3.fromRGB(80, 190, 255)
+    badgeStroke.Thickness = 1.2
+    badgeStroke.Transparency = 0.35
+    badgeStroke.Parent = badgeFrame
+
+    local nameLbl = Instance.new("TextLabel")
+    nameLbl.Size = UDim2.new(1, 0, 0.52, 0)
+    nameLbl.BackgroundTransparency = 1
+    nameLbl.Font = Enum.Font.GothamBold
+    nameLbl.Text = "🐧 Tux • LO's Pet"
+    nameLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLbl.TextSize = 12
+    nameLbl.Parent = badgeFrame
+
+    local moodLbl = Instance.new("TextLabel")
+    moodLbl.Size = UDim2.new(1, 0, 0.48, 0)
+    moodLbl.Position = UDim2.new(0, 0, 0.5, 0)
+    moodLbl.BackgroundTransparency = 1
+    moodLbl.Font = Enum.Font.Gotham
+    moodLbl.Text = "Mood: Waddling 🐾"
+    moodLbl.TextColor3 = Color3.fromRGB(180, 230, 180)
+    moodLbl.TextSize = 10
+    moodLbl.Parent = badgeFrame
+
+    -- Click-To-Pet Interactive System
+    local clickDetector = Instance.new("ClickDetector")
+    clickDetector.MaxActivationDistance = 30
+    clickDetector.Parent = root
+
+    local isBackflipping = false
+    local backflipTimer = 0
+    local isCheering = false
+    local cheerTimer = 0
+    local lastMoveTime = tick()
+    local currentPetPos = root.Position
+    local walkClock = 0
+    local pettedUntil = 0
+
+    local function emitHeartPuff()
+        for i = 1, 5 do
+            task.spawn(function()
+                local hGui = Instance.new("BillboardGui")
+                hGui.Size = UDim2.new(0, 28, 0, 28)
+                hGui.AlwaysOnTop = true
+                local randOffset = Vector3.new(math.random(-14, 14) / 10, 1.4, math.random(-14, 14) / 10)
+                hGui.StudsOffset = randOffset
+                hGui.Adornee = root
+                hGui.Parent = petModel
+
+                local lbl = Instance.new("TextLabel")
+                lbl.BackgroundTransparency = 1
+                lbl.Size = UDim2.new(1, 0, 1, 0)
+                lbl.Text = (i % 2 == 0) and "❤️" or "💖"
+                lbl.TextSize = 20
+                lbl.Parent = hGui
+
+                local startTime = tick()
+                local dur = 1.1
+                local c; c = RunService.RenderStepped:Connect(function()
+                    local el = tick() - startTime
+                    if el >= dur or not hGui.Parent then
+                        c:Disconnect()
+                        hGui:Destroy()
+                        return
+                    end
+                    hGui.StudsOffset = hGui.StudsOffset + Vector3.new(0, 0.055, 0)
+                    lbl.TextTransparency = el / dur
+                end)
+            end)
+        end
+    end
+
+    petClickConn = clickDetector.MouseClick:Connect(function(player)
+        if player == LocalPlayer then
+            isBackflipping = true
+            backflipTimer = 0.65
+            pettedUntil = tick() + 3.5
+            emitHeartPuff()
+            notify("Tux 🐧", "Tux does a joyful backflip for you, LO! ❤️", 2.5)
+        end
+    end)
+
+    -- Punch Cheering Hook
+    onTuxCheer = function()
+        if not petModel or not petModel.Parent then return end
+        isCheering = true
+        cheerTimer = 1.3
+    end
+
+    -- Downward raycast for realistic ground walking
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = RaycastFilterType.Exclude
+    rayParams.FilterDescendantsInstances = {char, petModel}
+    rayParams.IgnoreWater = true
+
+    local function getGroundPos(targetXZ, playerY)
+        local rayOrigin = Vector3.new(targetXZ.X, playerY + 5, targetXZ.Z)
+        local rayDir = Vector3.new(0, -25, 0)
+        local hit = Workspace:Raycast(rayOrigin, rayDir, rayParams)
+        if hit then
+            return hit.Position + Vector3.new(0, 1.05, 0)
+        else
+            return Vector3.new(targetXZ.X, playerY - 1.5, targetXZ.Z)
+        end
+    end
+
+    -- Main Animation & Movement Loop
+    local lastTick = tick()
+    petLoopConn = registerConn(RunService.RenderStepped:Connect(function()
+        local now = tick()
+        local dt = math.clamp(now - lastTick, 0, 0.1)
+        lastTick = now
+
+        if not State.TuxPet or not petModel or not petModel.Parent then
+            cleanupTuxPet()
+            return
+        end
+
+        local currentChar = LocalPlayer.Character
+        if not currentChar then return end
+        local hrp = currentChar:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        -- Target spot: behind and to the right of player
+        local targetOffset = -hrp.CFrame.LookVector * 4.2 + hrp.CFrame.RightVector * 2.5
+        local targetGround = getGroundPos(hrp.Position + targetOffset, hrp.Position.Y)
+
+        local distToTarget = (currentPetPos - targetGround).Magnitude
+        local distToPlayer = (currentPetPos - hrp.Position).Magnitude
+        local playerSpeed = hrp.AssemblyLinearVelocity.Magnitude
+
+        -- If too far away (teleport / respawn), snap instantly
+        if distToPlayer > 55 then
+            currentPetPos = targetGround
+            root.CFrame = CFrame.new(currentPetPos, currentPetPos + hrp.CFrame.LookVector)
+            return
+        end
+
+        -- Smooth position interpolation
+        local lerpAlpha = math.clamp(dt * 8.5, 0, 1)
+        currentPetPos = currentPetPos:Lerp(targetGround, lerpAlpha)
+
+        -- Determine look direction
+        local moveVec = (targetGround - currentPetPos)
+        local horizontalMove = Vector3.new(moveVec.X, 0, moveVec.Z)
+        local lookDir
+        if horizontalMove.Magnitude > 0.3 then
+            lookDir = horizontalMove.Unit
+        else
+            lookDir = hrp.CFrame.LookVector
+        end
+
+        local baseCF = CFrame.lookAt(currentPetPos, currentPetPos + lookDir)
+
+        -- Handle Backflip Priority State
+        if isBackflipping and backflipTimer > 0 then
+            backflipTimer = backflipTimer - dt
+            local alpha = 1 - (backflipTimer / 0.65)
+            local flipRot = CFrame.Angles(alpha * math.rad(-360), 0, 0)
+            local jumpY = Vector3.new(0, math.sin(alpha * math.pi) * 2.5, 0)
+
+            root.CFrame = CFrame.new(currentPetPos + jumpY) * (baseCF - baseCF.Position) * flipRot
+            leftWingJoint.C0 = leftWingBaseC0 * CFrame.Angles(0, 0, math.rad(-50))
+            rightWingJoint.C0 = rightWingBaseC0 * CFrame.Angles(0, 0, math.rad(50))
+            slideEmitter.Enabled = false
+            moodLbl.Text = "Mood: Loves LO! ❤️"
+            moodLbl.TextColor3 = Color3.fromRGB(255, 130, 160)
+            if backflipTimer <= 0 then
+                isBackflipping = false
+            end
+            return
+        end
+
+        -- Handle Cheer on Punch Priority State
+        if isCheering and cheerTimer > 0 then
+            cheerTimer = cheerTimer - dt
+            local cheerJump = Vector3.new(0, math.abs(math.sin(cheerTimer * 16)) * 1.6, 0)
+            local cheerSpin = CFrame.Angles(0, (1.3 - cheerTimer) * math.rad(720), 0)
+
+            root.CFrame = CFrame.new(currentPetPos + cheerJump) * (baseCF - baseCF.Position) * cheerSpin
+            leftWingJoint.C0 = leftWingBaseC0 * CFrame.Angles(0, 0, math.rad(-60))
+            rightWingJoint.C0 = rightWingBaseC0 * CFrame.Angles(0, 0, math.rad(60))
+            headJoint.C0 = headBaseC0 * CFrame.Angles(math.rad(-20), 0, 0)
+            slideEmitter.Enabled = false
+            moodLbl.Text = "💥 K.O.! GO LO! 🔥"
+            moodLbl.TextColor3 = Color3.fromRGB(255, 200, 60)
+            if cheerTimer <= 0 then
+                isCheering = false
+            end
+            return
+        end
+
+        -- Mode 1: Belly-Sliding (Speed > 24 or fast catch-up)
+        if playerSpeed > 24 or (distToTarget > 14 and playerSpeed > 10) then
+            lastMoveTime = now
+            slideEmitter.Enabled = true
+
+            local slideTilt = CFrame.Angles(math.rad(74), 0, 0)
+            local slideOffset = Vector3.new(0, -0.42, 0)
+            root.CFrame = CFrame.new(currentPetPos + slideOffset) * (baseCF - baseCF.Position) * slideTilt
+
+            -- Tuck flippers back & extend feet
+            leftWingJoint.C0 = leftWingBaseC0 * CFrame.Angles(math.rad(-35), 0, math.rad(-25))
+            rightWingJoint.C0 = rightWingBaseC0 * CFrame.Angles(math.rad(-35), 0, math.rad(25))
+            leftFootJoint.C0 = leftFootBaseC0 * CFrame.Angles(math.rad(60), 0, 0)
+            rightFootJoint.C0 = rightFootBaseC0 * CFrame.Angles(math.rad(60), 0, 0)
+            headJoint.C0 = headBaseC0 * CFrame.Angles(math.rad(-42), 0, 0)
+
+            moodLbl.Text = "Mood: Belly-Sliding ❄️"
+            moodLbl.TextColor3 = Color3.fromRGB(130, 215, 255)
+
+        -- Mode 2: Waddling Walk (Normal following)
+        elseif distToTarget > 1.15 then
+            lastMoveTime = now
+            slideEmitter.Enabled = false
+            walkClock = walkClock + dt * 10.5
+
+            local waddleRoll = CFrame.Angles(0, 0, math.sin(walkClock) * math.rad(14))
+            local waddleBob = Vector3.new(0, math.abs(math.sin(walkClock)) * 0.16, 0)
+            root.CFrame = CFrame.new(currentPetPos + waddleBob) * (baseCF - baseCF.Position) * waddleRoll
+
+            -- Alternating feet and flapping flippers
+            local footStep = math.sin(walkClock) * math.rad(26)
+            leftFootJoint.C0 = leftFootBaseC0 * CFrame.Angles(footStep, 0, 0) * CFrame.new(0, math.max(0, -math.sin(walkClock) * 0.12), 0)
+            rightFootJoint.C0 = rightFootBaseC0 * CFrame.Angles(-footStep, 0, 0) * CFrame.new(0, math.max(0, math.sin(walkClock) * 0.12), 0)
+
+            local wingFlap = math.sin(walkClock) * math.rad(22)
+            leftWingJoint.C0 = leftWingBaseC0 * CFrame.Angles(0, 0, wingFlap)
+            rightWingJoint.C0 = rightWingBaseC0 * CFrame.Angles(0, 0, -wingFlap)
+            headJoint.C0 = headBaseC0 * CFrame.Angles(0, 0, -math.sin(walkClock) * math.rad(8))
+
+            if now < pettedUntil then
+                moodLbl.Text = "Mood: Happy ❤️"
+                moodLbl.TextColor3 = Color3.fromRGB(255, 140, 180)
+            else
+                moodLbl.Text = "Mood: Waddling 🐾"
+                moodLbl.TextColor3 = Color3.fromRGB(180, 230, 180)
+            end
+
+        -- Mode 3: Idle or Napping (Zzz)
+        else
+            slideEmitter.Enabled = false
+            local idleDuration = now - lastMoveTime
+
+            -- Reset joints smoothly
+            leftWingJoint.C0 = leftWingBaseC0
+            rightWingJoint.C0 = rightWingBaseC0
+            leftFootJoint.C0 = leftFootBaseC0
+            rightFootJoint.C0 = rightFootBaseC0
+
+            if idleDuration > 6.5 then
+                -- Sleeping Zzz
+                local sleepSway = math.sin(idleDuration * 2.2) * 0.04
+                root.CFrame = CFrame.new(currentPetPos + Vector3.new(0, -0.22, 0)) * (baseCF - baseCF.Position)
+                headJoint.C0 = headBaseC0 * CFrame.Angles(math.rad(18 + sleepSway * 25), 0, 0)
+
+                local dots = math.floor(idleDuration % 3) + 1
+                local zzzStr = string.rep(".", dots)
+                moodLbl.Text = "Mood: Napping Zzz" .. zzzStr .. " 💤"
+                moodLbl.TextColor3 = Color3.fromRGB(190, 170, 255)
+            else
+                -- Relaxed Idle
+                local idleBreath = math.sin(idleDuration * 2.5) * 0.03
+                root.CFrame = CFrame.new(currentPetPos + Vector3.new(0, idleBreath, 0)) * (baseCF - baseCF.Position)
+                headJoint.C0 = headBaseC0 * CFrame.Angles(math.rad(-4), math.sin(idleDuration * 1.5) * math.rad(8), 0)
+
+                if now < pettedUntil then
+                    moodLbl.Text = "Mood: Happy ❤️"
+                    moodLbl.TextColor3 = Color3.fromRGB(255, 140, 180)
+                else
+                    moodLbl.Text = "Mood: Chilling ☕"
+                    moodLbl.TextColor3 = Color3.fromRGB(210, 220, 240)
+                end
+            end
+        end
+    end))
+end
+
 addModuleToggle(funScroll, "Tux Companion Pet 🐧", false, function(enabled)
     State.TuxPet = enabled
     if enabled then
-        if petModel then petModel:Destroy() end
-        petModel = Instance.new("Part")
-        petModel.Name = "TuxPet"
-        petModel.Size = Vector3.new(1.5, 1.8, 1.2)
-        petModel.Color = Color3.fromRGB(30, 30, 46)
-        petModel.Material = Enum.Material.SmoothPlastic
-        petModel.CanCollide = false
-        petModel.Parent = Workspace
-        registerInst(petModel)
-
-        local petFace = Instance.new("Decal")
-        petFace.Texture = "rbxassetid://28328223"
-        petFace.Face = Enum.NormalId.Front
-        petFace.Parent = petModel
-
-        local petGlow = Instance.new("SelectionBox")
-        petGlow.Adornee = petModel
-        petGlow.Color3 = currentTheme.Accent
-        petGlow.Parent = petModel
-
-        local petAngle = 0
-        registerConn(RunService.RenderStepped:Connect(function()
-            if State.TuxPet and petModel and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                petAngle = petAngle + 2
-                local hrp = LocalPlayer.Character.HumanoidRootPart
-                local offset = Vector3.new(math.sin(math.rad(petAngle)) * 3.5, 2.5 + math.sin(math.rad(petAngle * 2)) * 0.5, math.cos(math.rad(petAngle)) * 3.5)
-                petModel.CFrame = CFrame.new(hrp.Position + offset, hrp.Position)
-            else
-                if petModel then petModel:Destroy() end
-            end
-        end))
+        spawnSmartTuxPet()
+        notify("Tux Companion 🐧", "Tux is walking beside you! Click on Tux to pet him! ❤️", 3)
     else
-        if petModel then petModel:Destroy(); petModel = nil end
+        cleanupTuxPet()
     end
 end)
 
