@@ -670,7 +670,7 @@ registerConn(UserInputService.InputChanged:Connect(function(input)
     end
 end))
 
--- Authentic Replicated Fling Engine with Multi-Layer Anti-Death Protection
+-- SAFE & POWERFUL KNOCKBACK / SUPER PUNCH ENGINE
 local isPunching = false
 local function performSuperPunch()
     if isPunching then return end
@@ -680,9 +680,11 @@ local function performSuperPunch()
     if not char then isPunching = false; return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     local humanoid = char:FindFirstChildOfClass("Humanoid")
+    local head = char:FindFirstChild("Head")
+    local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
     if not hrp or not humanoid then isPunching = false; return end
 
-    -- 1. Visual Arm Swing Animation
+    -- 1. Visual Arm Swing Animation & Punch Effect
     task.spawn(function()
         pcall(function()
             local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
@@ -701,7 +703,7 @@ local function performSuperPunch()
         end
     end)
 
-    -- 2. Detect Closest Target Player
+    -- 2. Detect Closest Target Player (within 50 studs)
     local targetHrp = nil
     local closestDist = 50
 
@@ -718,88 +720,53 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Replicated Physics Fling with Anti-Death Immunity
-    if targetHrp then
+    -- 3. Execute Knockback & Replicated Impulse on Target
+    if targetHrp and targetHrp.Parent then
         local oldCF = hrp.CFrame
         local pushDir = (targetHrp.Position - hrp.Position).Unit
-        if pushDir ~= pushDir then pushDir = hrp.CFrame.LookVector end
+        if pushDir ~= pushDir or pushDir.Magnitude == 0 then pushDir = hrp.CFrame.LookVector end
 
-        -- Save & Protect Humanoid Health / Dead States
-        local origDeadState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead)
-        local origFallingState = humanoid:GetStateEnabled(Enum.HumanoidStateType.FallingDown)
+        local knockbackVector = (pushDir * 3500) + Vector3.new(0, 1500, 0)
 
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-        humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-        humanoid.PlatformStand = true
+        -- Protect local character properties & states
+        local origCanTouch = hrp.CanTouch
+        hrp.CanTouch = true
 
-        -- Active Health Lock during Fling Impact
-        local startHealth = humanoid.Health
-        local healthLock = registerConn(RunService.Heartbeat:Connect(function()
-            if humanoid and humanoid.Parent then
-                if humanoid.Health < startHealth then
-                    humanoid.Health = startHealth
-                end
-            end
-        end))
-
-        -- Disable Touch Damage & Body Part Collisions
-        hrp.CanTouch = false
-        for _, part in pairs(char:GetChildren()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = (part.Name == "HumanoidRootPart")
-            end
-        end
-
-        -- Spin Force on RootPart
+        -- Create temporary safe angular force for physics collision momentum transfer
         local bav = Instance.new("BodyAngularVelocity")
-        bav.Name = "TuxFlingSpin"
-        bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bav.AngularVelocity = Vector3.new(0, 999999, 0)
+        bav.Name = "TuxPunchSpin"
+        bav.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+        bav.AngularVelocity = Vector3.new(0, 15000, 0)
         bav.Parent = hrp
 
-        -- Fling Phase (0.22 seconds contact with target)
+        -- Brief physics contact & velocity impulse (0.12 sec contact window)
         local startTime = tick()
-        while tick() - startTime < 0.22 do
+        while tick() - startTime < 0.12 do
             if targetHrp and targetHrp.Parent then
+                -- Apply direct knockback velocity to target player
+                pcall(function()
+                    targetHrp.AssemblyLinearVelocity = knockbackVector
+                end)
+                -- Move local player to target location to trigger client-side physics collision
                 hrp.CFrame = targetHrp.CFrame
-                hrp.AssemblyLinearVelocity = (pushDir * 6000) + Vector3.new(0, 2500, 0)
+                hrp.AssemblyLinearVelocity = knockbackVector
             end
             RunService.Heartbeat:Wait()
         end
 
-        -- Remove Spin Force & Health Lock
+        -- Clean up physics forces
         bav:Destroy()
-        healthLock:Disconnect()
 
-        -- ZERO OUT ALL VELOCITIES & ANCHOR FOR 2 FRAMES (Prevents Local Player Fling & Death!)
+        -- Restore local player position & reset momentum cleanly
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
         hrp.CFrame = oldCF
+        hrp.CanTouch = origCanTouch
+
+        -- Brief anchor freeze (1 frame) to prevent client rubberband / physics backlash
         hrp.Anchored = true
-        hrp.CanTouch = true
-
         RunService.Heartbeat:Wait()
-        RunService.Heartbeat:Wait()
-
-        -- Unanchor & Restore Normal Standing State
         hrp.Anchored = false
-        humanoid.PlatformStand = false
-        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-
-        -- Restore Body Collisions
-        for _, part in pairs(char:GetChildren()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = true
-            end
-        end
-
-        -- Keep Dead state disabled for 1.5 seconds so delayed server damage packets don't kill character
-        task.delay(1.5, function()
-            if humanoid and humanoid.Parent then
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, origDeadState)
-                humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, origFallingState)
-            end
-        end)
     end
 
     task.wait(0.15)
