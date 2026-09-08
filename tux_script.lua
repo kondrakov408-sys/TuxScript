@@ -670,7 +670,7 @@ registerConn(UserInputService.InputChanged:Connect(function(input)
     end
 end))
 
--- ANTI-CHEAT BYPASS SUPER PUNCH ENGINE (Workspace Kinetic Impact Wave)
+-- 100% STATIONARY SUPER PUNCH ENGINE (Zero Teleport / Zero Self-Fling)
 local isPunching = false
 local function performSuperPunch()
     if isPunching then return end
@@ -718,50 +718,66 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Workspace Kinetic Impulse (LocalPlayer Character Remains Completely Stationary)
+    -- 3. Execute Remote Physics Knockback (STATIONARY LOCK on LocalPlayer)
     if targetHrp and targetHrp.Parent then
         local pushDir = (targetHrp.Position - hrp.Position).Unit
         if pushDir ~= pushDir or pushDir.Magnitude == 0 then pushDir = hrp.CFrame.LookVector end
 
-        -- Create Kinetic Glove in Workspace (SEPARATE from LocalPlayer Character Assembly!)
-        local glove = Instance.new("Part")
-        glove.Name = "TuxPunchImpactWave"
-        glove.Shape = Enum.PartType.Ball
-        glove.Size = Vector3.new(7, 7, 7)
-        glove.Color = currentTheme.Accent
-        glove.Material = Enum.Material.Neon
-        glove.Transparency = 0.3
-        glove.CanCollide = true
-        glove.CanTouch = true
-        glove.Massless = false
-        glove.CustomPhysicalProperties = PhysicalProperties.new(100, 1, 1, 1, 1)
-        glove.CFrame = targetHrp.CFrame
-        glove.Parent = Workspace -- MUST be in Workspace so LocalPlayer character never moves!
+        -- LOCK LOCAL PLAYER POSITION IN PLACE (Hard Anchor guarantee)
+        local initialCF = hrp.CFrame
+        hrp.Anchored = true
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
 
-        -- Angular Spin on Impact Object for Maximum Momentum Transfer
+        -- Create projectile part that moves from local player to target player
+        local bullet = Instance.new("Part")
+        bullet.Name = "TuxPunchBullet"
+        bullet.Size = Vector3.new(5, 5, 5)
+        bullet.Transparency = 1
+        bullet.CanCollide = true
+        bullet.CanTouch = true
+        bullet.Massless = true
+        bullet.CustomPhysicalProperties = PhysicalProperties.new(100, 1, 1, 1, 1)
+        bullet.CFrame = initialCF
+        bullet.Parent = Workspace
+
+        -- Prevent bullet from touching LocalPlayer
+        for _, part in pairs(char:GetChildren()) do
+            if part:IsA("BasePart") then
+                local ncc = Instance.new("NoCollisionConstraint")
+                ncc.Part0 = bullet
+                ncc.Part1 = part
+                ncc.Parent = bullet
+            end
+        end
+
         local bav = Instance.new("BodyAngularVelocity")
-        bav.Name = "TuxGloveSpin"
         bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
         bav.AngularVelocity = Vector3.new(0, 99999, 0)
-        bav.Parent = glove
+        bav.Parent = bullet
 
-        -- High Velocity Vector
-        local knockbackVector = (pushDir * 20000) + Vector3.new(0, 8000, 0)
+        local knockbackVector = (pushDir * 15000) + Vector3.new(0, 6000, 0)
+        
+        -- Fly bullet directly into target
         local startTime = tick()
-
-        while tick() - startTime < 0.18 do
-            if targetHrp and targetHrp.Parent and glove and glove.Parent then
-                pcall(function() targetHrp.CanCollide = true end)
-                glove.CFrame = targetHrp.CFrame
-                glove.AssemblyLinearVelocity = knockbackVector
+        while tick() - startTime < 0.15 do
+            if targetHrp and targetHrp.Parent and bullet and bullet.Parent then
+                targetHrp.CanCollide = true
+                bullet.CFrame = targetHrp.CFrame
+                bullet.AssemblyLinearVelocity = knockbackVector
             else
                 break
             end
             RunService.Heartbeat:Wait()
         end
 
-        -- Clean up Glove
-        pcall(function() glove:Destroy() end)
+        pcall(function() bullet:Destroy() end)
+
+        -- Clean unlock of LocalPlayer
+        hrp.CFrame = initialCF
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        hrp.Anchored = false
     end
 
     task.wait(0.15)
