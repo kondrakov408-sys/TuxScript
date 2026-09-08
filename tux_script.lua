@@ -324,10 +324,14 @@ ColumnsFrame.Size = UDim2.new(1, 0, 1, -48)
 ColumnsFrame.Position = UDim2.new(0, 0, 0, 48)
 ColumnsFrame.BackgroundTransparency = 1
 ColumnsFrame.BorderSizePixel = 0
-ColumnsFrame.ScrollBarThickness = 4
+ColumnsFrame.ScrollBarThickness = 5
 ColumnsFrame.ScrollBarImageColor3 = currentTheme.Accent
 ColumnsFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-ColumnsFrame.AutomaticCanvasSize = Enum.AutomaticSize.X
+ColumnsFrame.ScrollingDirection = Enum.ScrollingDirection.X
+ColumnsFrame.Active = true
+ColumnsFrame.Selectable = true
+ColumnsFrame.ScrollingEnabled = true
+ColumnsFrame.ElasticBehavior = Enum.ElasticBehavior.Always
 ColumnsFrame.Parent = MainContainer
 
 local ColumnsLayout = Instance.new("UIListLayout")
@@ -337,10 +341,30 @@ ColumnsLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ColumnsLayout.Padding = UDim.new(0, 10)
 ColumnsLayout.VerticalAlignment = Enum.VerticalAlignment.Top
 
+local function updateColumnsCanvas()
+    ColumnsFrame.CanvasSize = UDim2.new(0, ColumnsLayout.AbsoluteContentSize.X + 28, 0, 0)
+end
+ColumnsLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateColumnsCanvas)
+ColumnsFrame.ChildAdded:Connect(function() task.defer(updateColumnsCanvas) end)
+task.defer(updateColumnsCanvas)
+
 ---------------------------------------------------------
 -- MINECRAFT CATEGORY COLUMN BUILDER
 ---------------------------------------------------------
 local categoryColumns = {}
+
+-- Helper to allow mouse wheel scrolling even when hovering directly over buttons/sliders
+local function forwardMouseWheel(guiObj, targetScroll)
+    guiObj.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseWheel and targetScroll and targetScroll:IsA("ScrollingFrame") then
+            local delta = input.Position.Z * 42
+            local maxScroll = math.max(0, targetScroll.AbsoluteCanvasSize.Y - targetScroll.AbsoluteWindowSize.Y)
+            if maxScroll > 0 then
+                targetScroll.CanvasPosition = Vector2.new(0, math.clamp(targetScroll.CanvasPosition.Y - delta, 0, maxScroll))
+            end
+        end
+    end)
+end
 
 local function createCategoryColumn(title, icon, layoutOrder)
     local col = Instance.new("Frame")
@@ -375,16 +399,24 @@ local function createCategoryColumn(title, icon, layoutOrder)
     cHeaderCorner.CornerRadius = UDim.new(0, 10)
     cHeaderCorner.Parent = cHeader
 
-    -- Scroll Area for Features inside Column
+    -- Scroll Area for Features inside Column (Full PC MouseWheel + Mobile Touch Support)
     local cScroll = Instance.new("ScrollingFrame")
-    cScroll.Size = UDim2.new(1, -10, 1, -40)
-    cScroll.Position = UDim2.new(0, 5, 0, 36)
+    cScroll.Name = title .. "Scroll"
+    cScroll.Size = UDim2.new(1, -6, 1, -38)
+    cScroll.Position = UDim2.new(0, 3, 0, 36)
     cScroll.BackgroundTransparency = 1
     cScroll.BorderSizePixel = 0
-    cScroll.ScrollBarThickness = 3
+    cScroll.ScrollBarThickness = 6
     cScroll.ScrollBarImageColor3 = currentTheme.Accent
+    cScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+    cScroll.VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Right
+    cScroll.VerticalScrollBarInset = Enum.ScrollBarInset.None
+    cScroll.Active = true
+    cScroll.Selectable = true
+    cScroll.ScrollingEnabled = true
+    cScroll.ClipsDescendants = true
+    cScroll.ElasticBehavior = Enum.ElasticBehavior.Always
     cScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    cScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     cScroll.Parent = col
 
     local cLayout = Instance.new("UIListLayout")
@@ -392,6 +424,19 @@ local function createCategoryColumn(title, icon, layoutOrder)
     cLayout.SortOrder = Enum.SortOrder.LayoutOrder
     cLayout.Padding = UDim.new(0, 6)
     cLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+    -- Dynamically ensure CanvasSize ALWAYS expands so all items are 100% scrollable
+    local function updateScrollCanvas()
+        local contentHeight = cLayout.AbsoluteContentSize.Y
+        cScroll.CanvasSize = UDim2.new(0, 0, 0, contentHeight + 28)
+    end
+    cLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateScrollCanvas)
+    cScroll.ChildAdded:Connect(function() task.defer(updateScrollCanvas) end)
+    cScroll.ChildRemoved:Connect(function() task.defer(updateScrollCanvas) end)
+    task.defer(updateScrollCanvas)
+
+    -- Direct scroll on the background of the column
+    forwardMouseWheel(cScroll, cScroll)
 
     categoryColumns[title] = cScroll
     return cScroll
@@ -412,7 +457,7 @@ local designScroll  = createCategoryColumn("Design", "🎨", 5)
 local function addModuleToggle(parentScroll, name, defaultState, callback)
     local btn = Instance.new("TextButton")
     btn.Name = name .. "Toggle"
-    btn.Size = UDim2.new(0.96, 0, 0, 34)
+    btn.Size = UDim2.new(0.93, 0, 0, 34)
     btn.BackgroundColor3 = defaultState and currentTheme.Active or Color3.fromRGB(38, 38, 55)
     btn.Text = name
     btn.TextColor3 = defaultState and Color3.fromRGB(17, 17, 27) or currentTheme.Text
@@ -423,6 +468,9 @@ local function addModuleToggle(parentScroll, name, defaultState, callback)
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 6)
     corner.Parent = btn
+
+    -- Enable mouse wheel scrolling when cursor is over this toggle
+    forwardMouseWheel(btn, parentScroll)
 
     local state = defaultState
     btn.MouseButton1Click:Connect(function()
@@ -439,13 +487,16 @@ end
 -- Create Module Slider
 local function addModuleSlider(parentScroll, name, min, max, defaultVal, callback)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0.96, 0, 0, 46)
+    frame.Size = UDim2.new(0.93, 0, 0, 46)
     frame.BackgroundColor3 = Color3.fromRGB(32, 32, 48)
     frame.Parent = parentScroll
 
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 6)
     corner.Parent = frame
+
+    -- Enable mouse wheel scrolling when cursor is over this slider frame
+    forwardMouseWheel(frame, parentScroll)
 
     local titleLbl = Instance.new("TextLabel")
     titleLbl.Size = UDim2.new(1, -10, 0, 20)
@@ -462,6 +513,8 @@ local function addModuleSlider(parentScroll, name, min, max, defaultVal, callbac
     sliderBg.Position = UDim2.new(0.05, 0, 0, 28)
     sliderBg.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
     sliderBg.Parent = frame
+
+    forwardMouseWheel(sliderBg, parentScroll)
 
     local sCorner = Instance.new("UICorner")
     sCorner.CornerRadius = UDim.new(1, 0)
