@@ -14,7 +14,9 @@ local State = {
     NoClip = false,
     ESP = false,
     Fly = false,
-    FlySpeed = 60
+    FlySpeed = 60,
+    PunchEnabled = false,
+    PunchMode = "Combined" -- Options: "Impulser", "Spin", "Direct", "Combined"
 }
 
 -- Target GUI Parent (CoreGui preferred for executors, fallback PlayerGui)
@@ -41,11 +43,12 @@ ScreenGui.Parent = guiParent
 ---------------------------------------------------------
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 260, 0, 320)
-MainFrame.Position = UDim2.new(0.5, -130, 0.4, -160)
+MainFrame.Size = UDim2.new(0, 280, 0, 380)
+MainFrame.Position = UDim2.new(0.5, -140, 0.35, -190)
 MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 46) -- Dark Slate Navy
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
+MainFrame.ClipsDescendants = true
 MainFrame.Parent = ScreenGui
 
 local MainCorner = Instance.new("UICorner")
@@ -101,16 +104,24 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Container Layout
+-- Scroll Container Layout
+local ScrollFrame = Instance.new("ScrollingFrame")
+ScrollFrame.Name = "Container"
+ScrollFrame.Size = UDim2.new(1, -20, 1, -55)
+ScrollFrame.Position = UDim2.new(0, 10, 0, 50)
+ScrollFrame.BackgroundTransparency = 1
+ScrollFrame.BorderSizePixel = 0
+ScrollFrame.ScrollBarThickness = 4
+ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(249, 226, 175)
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+ScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ScrollFrame.Parent = MainFrame
+
 local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.Parent = MainFrame
+UIListLayout.Parent = ScrollFrame
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 UIListLayout.Padding = UDim.new(0, 10)
 UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-
-local TopPadding = Instance.new("UIPadding")
-TopPadding.PaddingTop = UDim.new(0, 50)
-TopPadding.Parent = MainFrame
 
 ---------------------------------------------------------
 -- BUTTON CREATOR HELPER
@@ -118,13 +129,13 @@ TopPadding.Parent = MainFrame
 local function createToggleButton(name, defaultState, callback)
     local btn = Instance.new("TextButton")
     btn.Name = name .. "Btn"
-    btn.Size = UDim2.new(0.85, 0, 0, 42)
+    btn.Size = UDim2.new(0.95, 0, 0, 42)
     btn.BackgroundColor3 = defaultState and Color3.fromRGB(166, 227, 161) or Color3.fromRGB(45, 45, 65)
     btn.Text = name .. ": " .. (defaultState and "ON" or "OFF")
     btn.TextColor3 = defaultState and Color3.fromRGB(17, 17, 27) or Color3.fromRGB(205, 214, 244)
     btn.Font = Enum.Font.GothamMedium
     btn.TextSize = 14
-    btn.Parent = MainFrame
+    btn.Parent = ScrollFrame
 
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 8)
@@ -197,14 +208,13 @@ createToggleButton("ESP 👁️", false, function(enabled)
     end
 end)
 
--- 3. UPRIGHT CFrame Fly (Character stays standing upright!)
+-- 3. UPRIGHT CFrame Fly
 local flyConn
 createToggleButton("Fly 🕊️", false, function(enabled)
     State.Fly = enabled
     local char = LocalPlayer.Character
     if not char then return end
     local humanoid = char:FindFirstChildOfClass("Humanoid")
-    local hrp = char:FindFirstChild("HumanoidRootPart")
 
     if enabled then
         if flyConn then flyConn:Disconnect() end
@@ -219,7 +229,6 @@ createToggleButton("Fly 🕊️", false, function(enabled)
             local curHum = curChar:FindFirstChildOfClass("Humanoid")
 
             if curHum then
-                -- Disable swimming state to prevent horizontal lying posture!
                 curHum.PlatformStand = false
             end
 
@@ -243,7 +252,6 @@ createToggleButton("Fly 🕊️", false, function(enabled)
                 end
 
                 if moveDir.Magnitude > 0 then
-                    -- Preserve vertical upright orientation
                     local yawCFrame = CFrame.Angles(0, math.atan2(-camCF.LookVector.X, -camCF.LookVector.Z), 0)
                     local nextPos = curHrp.Position + (moveDir.Unit * State.FlySpeed * dt)
                     curHrp.CFrame = CFrame.new(nextPos) * yawCFrame
@@ -256,11 +264,12 @@ createToggleButton("Fly 🕊️", false, function(enabled)
 end)
 
 ---------------------------------------------------------
--- 4. PUNCH BUTTON & MULTI-METHOD SUPER FLING
+-- 4. PUNCH BUTTON WITH MODE DROPDOWN & FLOATING TOGGLE
 ---------------------------------------------------------
 local PunchScreenGui = Instance.new("ScreenGui")
 PunchScreenGui.Name = "TuxPunchGui"
 PunchScreenGui.ResetOnSpawn = false
+PunchScreenGui.Enabled = false -- Hidden by default until activated in menu
 PunchScreenGui.Parent = guiParent
 
 local PunchBtn = Instance.new("TextButton")
@@ -283,7 +292,7 @@ PunchStroke.Color = Color3.fromRGB(255, 255, 255)
 PunchStroke.Thickness = 3
 PunchStroke.Parent = PunchBtn
 
--- Draggable Punch Action Button
+-- Draggable Floating Punch Action Button
 local pDragging, pDragInput, pDragStart, pStartPos
 PunchBtn.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -311,7 +320,124 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Multi-Technique Super Punch Fling
+-- Create Combined Punch Container in Menu (Toggle Button + Arrow Settings Dropdown)
+local PunchMenuFrame = Instance.new("Frame")
+PunchMenuFrame.Name = "PunchMenuFrame"
+PunchMenuFrame.Size = UDim2.new(0.95, 0, 0, 42)
+PunchMenuFrame.BackgroundTransparency = 1
+PunchMenuFrame.Parent = ScrollFrame
+
+local MainPunchToggle = Instance.new("TextButton")
+MainPunchToggle.Name = "MainPunchToggle"
+MainPunchToggle.Size = UDim2.new(0.78, 0, 0, 42)
+MainPunchToggle.Position = UDim2.new(0, 0, 0, 0)
+MainPunchToggle.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
+MainPunchToggle.Text = "Punch Button 🥊: OFF"
+MainPunchToggle.TextColor3 = Color3.fromRGB(205, 214, 244)
+MainPunchToggle.Font = Enum.Font.GothamMedium
+MainPunchToggle.TextSize = 13
+MainPunchToggle.Parent = PunchMenuFrame
+
+local MainPunchCorner = Instance.new("UICorner")
+MainPunchCorner.CornerRadius = UDim.new(0, 8)
+MainPunchCorner.Parent = MainPunchToggle
+
+local SettingsArrowBtn = Instance.new("TextButton")
+SettingsArrowBtn.Name = "SettingsArrowBtn"
+SettingsArrowBtn.Size = UDim2.new(0.18, 0, 0, 42)
+SettingsArrowBtn.Position = UDim2.new(0.82, 0, 0, 0)
+SettingsArrowBtn.BackgroundColor3 = Color3.fromRGB(58, 58, 85)
+SettingsArrowBtn.Text = "▶"
+SettingsArrowBtn.TextColor3 = Color3.fromRGB(249, 226, 175)
+SettingsArrowBtn.Font = Enum.Font.GothamBold
+SettingsArrowBtn.TextSize = 14
+SettingsArrowBtn.Parent = PunchMenuFrame
+
+local ArrowCorner = Instance.new("UICorner")
+ArrowCorner.CornerRadius = UDim.new(0, 8)
+ArrowCorner.Parent = SettingsArrowBtn
+
+-- Punch Settings Sub-panel
+local SettingsPanel = Instance.new("Frame")
+SettingsPanel.Name = "SettingsPanel"
+SettingsPanel.Size = UDim2.new(0.95, 0, 0, 0)
+SettingsPanel.BackgroundColor3 = Color3.fromRGB(24, 24, 37)
+SettingsPanel.BorderSizePixel = 0
+SettingsPanel.Visible = false
+SettingsPanel.ClipsDescendants = true
+SettingsPanel.Parent = ScrollFrame
+
+local SettingsCorner = Instance.new("UICorner")
+SettingsCorner.CornerRadius = UDim.new(0, 8)
+SettingsCorner.Parent = SettingsPanel
+
+local SettingsLayout = Instance.new("UIListLayout")
+SettingsLayout.Parent = SettingsPanel
+SettingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+SettingsLayout.Padding = UDim.new(0, 5)
+SettingsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+local SettingsPadding = Instance.new("UIPadding")
+SettingsPadding.PaddingTop = UDim.new(0, 8)
+SettingsPadding.PaddingBottom = UDim.new(0, 8)
+SettingsPadding.Parent = SettingsPanel
+
+-- Mode Buttons in Settings Panel
+local modesList = {
+    {id = "Combined", label = "Mode: 3-in-1 Combined 🔥"},
+    {id = "Impulser", label = "Mode 1: Block Impulse 📦"},
+    {id = "Spin", label = "Mode 2: Orbital Spin 🌀"},
+    {id = "Direct", label = "Mode 3: Direct Velocity ⚡"}
+}
+
+local modeButtons = {}
+for _, modeData in ipairs(modesList) do
+    local mBtn = Instance.new("TextButton")
+    mBtn.Name = "Mode_" .. modeData.id
+    mBtn.Size = UDim2.new(0.9, 0, 0, 32)
+    mBtn.BackgroundColor3 = (State.PunchMode == modeData.id) and Color3.fromRGB(249, 226, 175) or Color3.fromRGB(45, 45, 65)
+    mBtn.Text = modeData.label
+    mBtn.TextColor3 = (State.PunchMode == modeData.id) and Color3.fromRGB(17, 17, 27) or Color3.fromRGB(205, 214, 244)
+    mBtn.Font = Enum.Font.GothamMedium
+    mBtn.TextSize = 12
+    mBtn.Parent = SettingsPanel
+
+    local mCorner = Instance.new("UICorner")
+    mCorner.CornerRadius = UDim.new(0, 6)
+    mCorner.Parent = mBtn
+
+    mBtn.MouseButton1Click:Connect(function()
+        State.PunchMode = modeData.id
+        for id, b in pairs(modeButtons) do
+            local isSel = (id == modeData.id)
+            b.BackgroundColor3 = isSel and Color3.fromRGB(249, 226, 175) or Color3.fromRGB(45, 45, 65)
+            b.TextColor3 = isSel and Color3.fromRGB(17, 17, 27) or Color3.fromRGB(205, 214, 244)
+        end
+    end)
+    modeButtons[modeData.id] = mBtn
+end
+
+-- Toggle Punch Button Visibility
+MainPunchToggle.MouseButton1Click:Connect(function()
+    State.PunchEnabled = not State.PunchEnabled
+    PunchScreenGui.Enabled = State.PunchEnabled
+    MainPunchToggle.BackgroundColor3 = State.PunchEnabled and Color3.fromRGB(166, 227, 161) or Color3.fromRGB(45, 45, 65)
+    MainPunchToggle.Text = "Punch Button 🥊: " .. (State.PunchEnabled and "ON" or "OFF")
+    MainPunchToggle.TextColor3 = State.PunchEnabled and Color3.fromRGB(17, 17, 27) or Color3.fromRGB(205, 214, 244)
+end)
+
+-- Toggle Settings Dropdown Panel
+local isSettingsOpen = false
+SettingsArrowBtn.MouseButton1Click:Connect(function()
+    isSettingsOpen = not isSettingsOpen
+    SettingsArrowBtn.Text = isSettingsOpen and "▼" or "▶"
+    SettingsPanel.Visible = isSettingsOpen
+    SettingsPanel.Size = isSettingsOpen and UDim2.new(0.95, 0, 0, 160) or UDim2.new(0.95, 0, 0, 0)
+end)
+
+---------------------------------------------------------
+-- PUNCH EXECUTION WITH SELECTED MODE
+---------------------------------------------------------
 local isPunching = false
 local function performSuperPunch()
     if isPunching then return end
@@ -323,7 +449,7 @@ local function performSuperPunch()
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not humanoid then isPunching = false; return end
 
-    -- 1. Visual Punch Swing (Animation + Shoulder joint motor swing)
+    -- 1. Animation Track & Procedural Arm Swing
     task.spawn(function()
         pcall(function()
             local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
@@ -359,58 +485,69 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Super Fling Impact (Combines 3 Fling Methods)
+    -- 3. Execute Selected Mode
     if targetHrp then
-        local origCF = hrp.CFrame
         local pushDir = (targetHrp.Position - hrp.Position).Unit
         if pushDir ~= pushDir then pushDir = hrp.CFrame.LookVector end
+        local mode = State.PunchMode
 
-        -- Create Physical Touch Block (Method 1: Heavy Impulser Block)
-        local flingPart = Instance.new("Part")
-        flingPart.Size = Vector3.new(5, 5, 5)
-        flingPart.Transparency = 1
-        flingPart.CanCollide = true
-        flingPart.Massless = false
-        flingPart.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 100, 100, 100)
-        flingPart.CFrame = targetHrp.CFrame
-        flingPart.Parent = Workspace
+        -- MODE 1: Physics Impulser Block
+        if mode == "Impulser" or mode == "Combined" then
+            local flingPart = Instance.new("Part")
+            flingPart.Size = Vector3.new(6, 6, 6)
+            flingPart.Transparency = 1
+            flingPart.CanCollide = true
+            flingPart.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 100, 100, 100)
+            flingPart.CFrame = targetHrp.CFrame
+            flingPart.Parent = Workspace
 
-        -- Add Extreme Angular Velocity & Velocity to Impulser
-        local bav = Instance.new("BodyAngularVelocity")
-        bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bav.AngularVelocity = Vector3.new(99999, 99999, 99999)
-        bav.Parent = flingPart
+            local bav = Instance.new("BodyAngularVelocity")
+            bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            bav.AngularVelocity = Vector3.new(99999, 99999, 99999)
+            bav.Parent = flingPart
 
-        local bv = Instance.new("BodyVelocity")
-        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bv.Velocity = (pushDir * 5000) + Vector3.new(0, 2000, 0)
-        bv.Parent = flingPart
+            local bv = Instance.new("BodyVelocity")
+            bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bv.Velocity = (pushDir * 6000) + Vector3.new(0, 2500, 0)
+            bv.Parent = flingPart
 
-        -- Method 2: Rapid Orbital Spin Teleport into Victim (0.2s)
-        local startTime = tick()
-        local stepAngle = 0
-        while tick() - startTime < 0.22 do
-            stepAngle = stepAngle + 120
-            if targetHrp and targetHrp.Parent then
-                flingPart.CFrame = targetHrp.CFrame
-                hrp.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(stepAngle), 0) * CFrame.new(0, 0, 0.1)
-                
-                -- Method 3: Direct Velocity Overwrite (Works if network ownership granted)
-                pcall(function()
-                    targetHrp.AssemblyLinearVelocity = (pushDir * 4000) + Vector3.new(0, 2000, 0)
-                    targetHrp.AssemblyAngularVelocity = Vector3.new(9999, 9999, 9999)
-                end)
-            end
-            RunService.Heartbeat:Wait()
+            task.delay(0.2, function()
+                flingPart:Destroy()
+            end)
         end
 
-        -- Clean up
-        flingPart:Destroy()
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
+        -- MODE 2: Orbital Spin Fling
+        if mode == "Spin" or mode == "Combined" then
+            local origCF = hrp.CFrame
+            local startTime = tick()
+            local stepAngle = 0
 
-        -- Return back to original position smoothly
-        hrp.CFrame = origCF
+            local bav = Instance.new("BodyAngularVelocity")
+            bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            bav.AngularVelocity = Vector3.new(0, 999999, 0)
+            bav.Parent = hrp
+
+            while tick() - startTime < 0.22 do
+                stepAngle = stepAngle + 120
+                if targetHrp and targetHrp.Parent then
+                    hrp.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(stepAngle), 0) * CFrame.new(0, 0, 0.1)
+                    hrp.AssemblyLinearVelocity = (pushDir * 4000) + Vector3.new(0, 2000, 0)
+                end
+                RunService.Heartbeat:Wait()
+            end
+
+            bav:Destroy()
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.CFrame = origCF
+        end
+
+        -- MODE 3: Direct Velocity Overwrite
+        if mode == "Direct" or mode == "Combined" then
+            pcall(function()
+                targetHrp.AssemblyLinearVelocity = (pushDir * 5000) + Vector3.new(0, 2500, 0)
+                targetHrp.AssemblyAngularVelocity = Vector3.new(99999, 99999, 99999)
+            end)
+        end
     end
 
     task.wait(0.15)
