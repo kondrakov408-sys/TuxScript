@@ -670,7 +670,7 @@ registerConn(UserInputService.InputChanged:Connect(function(input)
     end
 end))
 
--- Authentic Replicated Fling Engine with Anchor Anti-Self-Fling Protection
+-- Authentic Replicated Fling Engine with Multi-Layer Anti-Death Protection
 local isPunching = false
 local function performSuperPunch()
     if isPunching then return end
@@ -718,16 +718,32 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Replicated Physics Fling
+    -- 3. Execute Replicated Physics Fling with Anti-Death Immunity
     if targetHrp then
         local oldCF = hrp.CFrame
         local pushDir = (targetHrp.Position - hrp.Position).Unit
         if pushDir ~= pushDir then pushDir = hrp.CFrame.LookVector end
 
-        -- Enable PlatformStand to prevent tripping
+        -- Save & Protect Humanoid Health / Dead States
+        local origDeadState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead)
+        local origFallingState = humanoid:GetStateEnabled(Enum.HumanoidStateType.FallingDown)
+
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
         humanoid.PlatformStand = true
 
-        -- Disable CanCollide on all body parts EXCEPT HumanoidRootPart
+        -- Active Health Lock during Fling Impact
+        local startHealth = humanoid.Health
+        local healthLock = registerConn(RunService.Heartbeat:Connect(function()
+            if humanoid and humanoid.Parent then
+                if humanoid.Health < startHealth then
+                    humanoid.Health = startHealth
+                end
+            end
+        end))
+
+        -- Disable Touch Damage & Body Part Collisions
+        hrp.CanTouch = false
         for _, part in pairs(char:GetChildren()) do
             if part:IsA("BasePart") then
                 part.CanCollide = (part.Name == "HumanoidRootPart")
@@ -751,21 +767,24 @@ local function performSuperPunch()
             RunService.Heartbeat:Wait()
         end
 
-        -- Remove Spin Force
+        -- Remove Spin Force & Health Lock
         bav:Destroy()
+        healthLock:Disconnect()
 
-        -- ZERO OUT ALL VELOCITIES & ANCHOR FOR 1 FRAME (Prevents Local Player Fling!)
+        -- ZERO OUT ALL VELOCITIES & ANCHOR FOR 2 FRAMES (Prevents Local Player Fling & Death!)
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
         hrp.CFrame = oldCF
         hrp.Anchored = true
+        hrp.CanTouch = true
 
-        -- Wait 1 frame while anchored so Roblox clears physics momentum
+        RunService.Heartbeat:Wait()
         RunService.Heartbeat:Wait()
 
-        -- Unanchor & Restore Normal State
+        -- Unanchor & Restore Normal Standing State
         hrp.Anchored = false
         humanoid.PlatformStand = false
+        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 
         -- Restore Body Collisions
         for _, part in pairs(char:GetChildren()) do
@@ -773,6 +792,14 @@ local function performSuperPunch()
                 part.CanCollide = true
             end
         end
+
+        -- Keep Dead state disabled for 1.5 seconds so delayed server damage packets don't kill character
+        task.delay(1.5, function()
+            if humanoid and humanoid.Parent then
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, origDeadState)
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, origFallingState)
+            end
+        end)
     end
 
     task.wait(0.15)
