@@ -384,7 +384,7 @@ SettingsPadding.Parent = SettingsPanel
 
 -- Mode Buttons in Settings Panel
 local modesList = {
-    {id = "Combined", label = "Mode: 3-in-1 Combined 🔥"},
+    {id = "Combined", label = "Mode: AC-Safe Combo 🔥"},
     {id = "Impulser", label = "Mode 1: Rotor Spin Fling 🌀"},
     {id = "Spin", label = "Mode 2: Angular Sweep Fling ⚡"},
     {id = "Direct", label = "Mode 3: Linear Push Dash 💨"}
@@ -436,7 +436,7 @@ SettingsArrowBtn.MouseButton1Click:Connect(function()
 end)
 
 ---------------------------------------------------------
--- REAL INFINITE YIELD STYLE FLING WITH ANCHOR ANTI-DEATH
+-- ANTI-CHEAT SAFE FLING ENGINE (No AC Ban / Void Kill)
 ---------------------------------------------------------
 local isPunching = false
 local function performSuperPunch()
@@ -470,7 +470,7 @@ local function performSuperPunch()
 
     -- 2. Detect Closest Target Player
     local targetHrp = nil
-    local closestDist = 50
+    local closestDist = 45
 
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
@@ -485,19 +485,23 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Real Client-Side Fling
+    -- 3. Anti-Cheat Safe Fling
     if targetHrp then
         local origCF = hrp.CFrame
         local pushDir = (targetHrp.Position - hrp.Position).Unit
         if pushDir ~= pushDir then pushDir = hrp.CFrame.LookVector end
         local mode = State.PunchMode
 
-        -- Save & Protect Local Player from Death / Tripping
+        -- Save & Protect States
         local origDeadState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead)
         humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
         humanoid.PlatformStand = true
 
-        -- Disable limb collisions so limbs don't explode/trip, keep collision ONLY on RootPart
+        -- Anti-Cheat Thresholds (Limits Velocity & Angular speed to stay under AC detection threshold)
+        local safeAngular = 12000 -- 12k RPM is optimal for fling torque without triggering Anti-Cheat kill
+        local safeLinear = 1200
+
+        -- Disable limb collisions so limbs don't trip
         for _, part in pairs(char:GetChildren()) do
             if part:IsA("BasePart") then
                 if part.Name == "HumanoidRootPart" then
@@ -511,15 +515,15 @@ local function performSuperPunch()
         if mode == "Impulser" then
             local bav = Instance.new("BodyAngularVelocity")
             bav.Name = "TuxRotorFling"
-            bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-            bav.AngularVelocity = Vector3.new(0, 999999, 0)
+            bav.MaxTorque = Vector3.new(0, math.huge, 0)
+            bav.AngularVelocity = Vector3.new(0, safeAngular, 0)
             bav.Parent = hrp
 
             local startTime = tick()
-            while tick() - startTime < 0.22 do
+            while tick() - startTime < 0.15 do
                 if targetHrp and targetHrp.Parent then
-                    hrp.CFrame = targetHrp.CFrame * CFrame.new(0, 0, 0)
-                    hrp.AssemblyLinearVelocity = Vector3.new(9999, 9999, 9999)
+                    hrp.CFrame = targetHrp.CFrame
+                    hrp.AssemblyLinearVelocity = pushDir * safeLinear
                 end
                 RunService.Heartbeat:Wait()
             end
@@ -527,16 +531,16 @@ local function performSuperPunch()
 
         elseif mode == "Spin" then
             local bav = Instance.new("BodyAngularVelocity")
-            bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-            bav.AngularVelocity = Vector3.new(999999, 999999, 999999)
+            bav.MaxTorque = Vector3.new(0, math.huge, 0)
+            bav.AngularVelocity = Vector3.new(0, safeAngular, 0)
             bav.Parent = hrp
 
             local startTime = tick()
             local angle = 0
-            while tick() - startTime < 0.22 do
+            while tick() - startTime < 0.15 do
                 angle = angle + 90
                 if targetHrp and targetHrp.Parent then
-                    hrp.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(angle), 0) * CFrame.new(0, 0, 0.5)
+                    hrp.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(angle), 0)
                 end
                 RunService.Heartbeat:Wait()
             end
@@ -545,11 +549,11 @@ local function performSuperPunch()
         elseif mode == "Direct" then
             local bv = Instance.new("BodyVelocity")
             bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            bv.Velocity = (pushDir * 5000) + Vector3.new(0, 2500, 0)
+            bv.Velocity = (pushDir * safeLinear) + Vector3.new(0, 400, 0)
             bv.Parent = hrp
 
             local startTime = tick()
-            while tick() - startTime < 0.2 do
+            while tick() - startTime < 0.15 do
                 if targetHrp and targetHrp.Parent then
                     hrp.CFrame = targetHrp.CFrame
                 end
@@ -557,19 +561,19 @@ local function performSuperPunch()
             end
             bv:Destroy()
 
-        else -- Mode: Combined (3-in-1)
+        else -- Mode: AC-Safe Combo
             local bav = Instance.new("BodyAngularVelocity")
-            bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-            bav.AngularVelocity = Vector3.new(999999, 999999, 999999)
+            bav.MaxTorque = Vector3.new(0, math.huge, 0)
+            bav.AngularVelocity = Vector3.new(0, safeAngular, 0)
             bav.Parent = hrp
 
             local startTime = tick()
             local angle = 0
-            while tick() - startTime < 0.22 do
-                angle = angle + 120
+            while tick() - startTime < 0.15 do
+                angle = angle + 90
                 if targetHrp and targetHrp.Parent then
                     hrp.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(angle), 0)
-                    hrp.AssemblyLinearVelocity = (pushDir * 5000) + Vector3.new(0, 2500, 0)
+                    hrp.AssemblyLinearVelocity = (pushDir * safeLinear) + Vector3.new(0, 300, 0)
                 end
                 RunService.Heartbeat:Wait()
             end
@@ -579,31 +583,24 @@ local function performSuperPunch()
         ---------------------------------------------------------
         -- ANCHOR ANTI-DEATH RESTORATION ENGINE
         ---------------------------------------------------------
-        -- 1. Instantly Anchor RootPart & Freeze Physics Momentum
         hrp.Anchored = true
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
-
-        -- 2. Teleport back to safe origin position while anchored
         hrp.CFrame = origCF
 
-        -- 3. Wait 1 Heartbeat frame while anchored so server clears momentum
         RunService.Heartbeat:Wait()
 
-        -- 4. Unanchor & Restore Standing State
         hrp.Anchored = false
         humanoid.PlatformStand = false
         humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 
-        -- 5. Restore Limb Collisions
         for _, part in pairs(char:GetChildren()) do
             if part:IsA("BasePart") then
                 part.CanCollide = true
             end
         end
 
-        -- 6. Delayed re-enable of Dead State so delayed physics packets don't kill character
-        task.delay(0.4, function()
+        task.delay(0.6, function()
             if humanoid and humanoid.Parent then
                 humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, origDeadState)
             end
