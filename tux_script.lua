@@ -700,7 +700,7 @@ local function performSuperPunch()
                 local track = animator:LoadAnimation(anim)
                 track.Looped = false
                 track:Play(0.05, 1, 2.5)
-                task.delay(0.35, function()
+                task.delay(0.4, function()
                     pcall(function() track:Stop() end)
                 end)
             end)
@@ -714,10 +714,10 @@ local function performSuperPunch()
             end
         end)
 
-        -- 2. Detect Target Player (Aim-First Mouse Target + Universal Avatar Scanner)
+        -- 2. Detect Target Player (Camera Crosshair > Mouse Aim > Closest Player)
         local targetCharacter = nil
         local targetPart = nil
-        local maxPunchDist = 110
+        local maxPunchDist = 65
         local closestDist = maxPunchDist
 
         local function getTargetRoot(character)
@@ -731,8 +731,24 @@ local function performSuperPunch()
                 or character:FindFirstChildWhichIsA("BasePart")
         end
 
-        -- Priority 1: Aiming directly at a player with Mouse
-        if Mouse.Target then
+        -- Priority 1: Screen Center / Crosshair Ray (Works perfectly even when tapping on-screen Punch button!)
+        local cam = Workspace.CurrentCamera
+        if cam then
+            local centerRay = Ray.new(cam.CFrame.Position, cam.CFrame.LookVector * maxPunchDist)
+            local hitPart, _ = Workspace:FindPartOnRayWithIgnoreList(centerRay, {char})
+            if hitPart and hitPart.Parent then
+                local cChar = hitPart.Parent
+                if not cChar:FindFirstChildOfClass("Humanoid") and cChar.Parent then cChar = cChar.Parent end
+                local cPlayer = Players:GetPlayerFromCharacter(cChar)
+                if cPlayer and cPlayer ~= LocalPlayer then
+                    targetCharacter = cChar
+                    targetPart = getTargetRoot(cChar)
+                end
+            end
+        end
+
+        -- Priority 2: Direct Mouse Pointer Aim
+        if not targetCharacter and Mouse.Target then
             local mChar = Mouse.Target.Parent
             if mChar and not mChar:FindFirstChildOfClass("Humanoid") and mChar.Parent then
                 mChar = mChar.Parent
@@ -751,7 +767,7 @@ local function performSuperPunch()
             end
         end
 
-        -- Priority 2: Closest Player within range
+        -- Priority 3: Closest Player within range
         if not targetCharacter then
             for _, player in pairs(Players:GetPlayers()) do
                 if player ~= LocalPlayer and player.Character then
@@ -771,19 +787,15 @@ local function performSuperPunch()
             end
         end
 
-        -- 3. Execute Non-Lethal-To-Self, Maximum-Fling Punch
+        -- 3. Execute Non-Lethal-To-Self, Anti-Cheat Safe, High-Damage Combo Punch
         if targetCharacter and targetPart and targetCharacter.Parent then
             local homeCF = hrp.CFrame
-            local punchDir = (targetPart.Position - homeCF.Position).Unit
-            if punchDir.Magnitude < 0.1 then
-                punchDir = homeCF.LookVector
-            end
 
-            -- A. GODMODE & ANTI-FALL/IMPACT DAMAGE GUARD
+            -- A. GODMODE & COMPLETE GROUND COLLISION IMMUNITY
             local safeHealth = humanoid.Health
             local godConn = humanoid.HealthChanged:Connect(function(newHealth)
-                if newHealth < safeHealth and humanoid and humanoid.Parent and humanoid.Health > 0 then
-                    humanoid.Health = safeHealth
+                if humanoid and humanoid.Parent and newHealth < safeHealth then
+                    pcall(function() humanoid.Health = safeHealth end)
                 end
             end)
 
@@ -813,65 +825,39 @@ local function performSuperPunch()
                 end)
             end
 
-            -- B. HITBOX EXPANSION ON TARGET (16x16x16: guarantees hits on walking/jumping targets)
-            local origTargetSize = targetPart.Size
-            local origTargetCanCollide = targetPart.CanCollide
-            pcall(function()
-                targetPart.Size = Vector3.new(16, 16, 16)
-                targetPart.CanCollide = true
-            end)
-
-            -- C. AUTOMATIC COMBAT WEAPON & COMBAT REMOTES
-            if not char:FindFirstChildOfClass("Tool") then
+            -- Automatically equip combat tool if available
+            local activeTool = char:FindFirstChildOfClass("Tool")
+            if not activeTool then
                 local backpack = LocalPlayer:FindFirstChild("Backpack")
                 if backpack then
                     local tool = backpack:FindFirstChildOfClass("Tool")
                     if tool then
                         pcall(function() humanoid:EquipTool(tool) end)
+                        activeTool = tool
                     end
                 end
             end
 
-            task.spawn(function()
-                local combatKeywords = {"punch", "attack", "hit", "damage", "swing", "slash", "combat", "melee", "slap"}
-                local function checkAndFire(inst)
-                    if inst:IsA("RemoteEvent") then
-                        local lName = string.lower(inst.Name)
-                        for _, kw in ipairs(combatKeywords) do
-                            if string.find(lName, kw) then
-                                pcall(function() inst:FireServer(targetCharacter, targetPart) end)
-                                pcall(function() inst:FireServer(targetPart.Position) end)
-                                pcall(function() inst:FireServer("Punch", targetCharacter) end)
-                                pcall(function() inst:FireServer() end)
-                                break
-                            end
-                        end
-                    end
-                end
-                for _, inst in pairs(char:GetDescendants()) do checkAndFire(inst) end
-                local rep = game:GetService("ReplicatedStorage")
-                for _, inst in pairs(rep:GetDescendants()) do checkAndFire(inst) end
-            end)
-
-            -- D. SOLID HRP COLLISION (Transfers torque impulse to target) while keeping limbs CanTouch=false
+            -- B. IMMUNITY TO GROUND TOUCHES & SENSORS
+            -- Set CanTouch=false on ALL character parts EXCEPT weapon/fist!
+            -- This completely prevents the place's ground fall damage / killbrick Touched scripts from ever firing!
             local origCanTouch = {}
             for _, p in pairs(char:GetDescendants()) do
                 if p:IsA("BasePart") then
                     origCanTouch[p] = p.CanTouch
-                    pcall(function()
-                        if p.Name ~= "RightHand" and p.Name ~= "Right Arm" and not p:IsDescendantOf(char:FindFirstChildOfClass("Tool") or char) then
-                            p.CanTouch = false
-                        end
-                    end)
+                    local isWeaponPart = (activeTool and p:IsDescendantOf(activeTool)) or p.Name == "RightHand" or p.Name == "Right Arm"
+                    if not isWeaponPart then
+                        pcall(function() p.CanTouch = false end)
+                    end
                 end
             end
 
-            -- Stepped collision: HRP CanCollide=true for real physics launch, limbs CanCollide=false so no floor clipping
+            -- Stepped collision: Torso and HRP collide with target, limbs & feet CanCollide=false to prevent any floor snagging
             local noclipConn = RunService.Stepped:Connect(function()
                 if char and char.Parent then
                     for _, p in pairs(char:GetDescendants()) do
                         if p:IsA("BasePart") then
-                            if p == hrp then
+                            if p == hrp or p.Name == "Torso" or p.Name == "UpperTorso" then
                                 p.CanCollide = true
                             else
                                 p.CanCollide = false
@@ -881,102 +867,188 @@ local function performSuperPunch()
                 end
             end)
 
-            -- E. ROTATIONAL TORQUE ENGINE (24,000 angular velocity = massive fling on contact)
+            -- C. UNIVERSAL HITBOX EXPANSION ON TARGET (Guarantees hits on R6, R15, custom skins/packages)
+            local origSizes = {}
+            local origCollides = {}
+            local origTargetCanTouch = {}
+            local targetHitParts = {}
+
+            for _, pName in ipairs({"UpperTorso", "Torso", "HumanoidRootPart", "LowerTorso", "Head"}) do
+                local p = targetCharacter:FindFirstChild(pName)
+                if p and p:IsA("BasePart") then
+                    table.insert(targetHitParts, p)
+                end
+            end
+            if #targetHitParts == 0 then
+                for _, p in pairs(targetCharacter:GetChildren()) do
+                    if p:IsA("BasePart") then
+                        table.insert(targetHitParts, p)
+                    end
+                end
+            end
+
+            for _, p in ipairs(targetHitParts) do
+                origSizes[p] = p.Size
+                origCollides[p] = p.CanCollide
+                origTargetCanTouch[p] = p.CanTouch
+                pcall(function()
+                    p.Size = Vector3.new(22, 22, 22)
+                    p.CanCollide = true
+                    p.CanTouch = true
+                end)
+            end
+
+            -- D. ANTI-CHEAT SAFE ROTATIONAL TORQUE FLING ENGINE
+            -- Spun on Y-axis for maximum centrifugal throw without triggering linear velocity anti-cheats
             local bav = Instance.new("BodyAngularVelocity")
             bav.Name = "TuxPunchTorque"
             bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-            bav.AngularVelocity = Vector3.new(0, 24000, 0)
+            bav.AngularVelocity = Vector3.new(1500, 18000, 1500)
             bav.P = math.huge
             bav.Parent = hrp
 
-            -- F. RAPID-FIRE COMBO ATTACK LOOP (Glued to moving target, activates tools every frame)
-            local strikeDuration = 0.35
+            -- E. DEVASTATING CONTINUOUS COMBO LOOP (0.65s duration for 6-10 full hit cycles)
+            local strikeDuration = 0.65
             local strikeStart = tick()
+
+            -- Raycast parameters to detect floor below target
+            local floorParams = RaycastParams.new()
+            floorParams.FilterType = RaycastFilterType.Exclude
+            floorParams.FilterDescendantsInstances = {char, targetCharacter}
+            floorParams.IgnoreWater = true
+
+            local touchCycle = 0
 
             while tick() - strikeStart < strikeDuration do
                 if not targetCharacter or not targetCharacter.Parent or not targetPart or not targetPart.Parent then
                     break
                 end
 
-                local tPos = targetPart.Position
-                local tVel = targetPart.AssemblyLinearVelocity
+                local curTPos = targetPart.Position
+                local curTVel = targetPart.AssemblyLinearVelocity
 
-                -- Direct real-time intercept: sticks directly to the moving target
-                local lead = (tVel.Magnitude > 0.5) and (tVel.Unit * 0.45) or Vector3.zero
-                local attackPos = tPos + lead + Vector3.new(0, 0.8, 0)
+                -- Detect real ground height below target to guarantee our feet hover safely above the floor
+                local floorRay = Workspace:Raycast(curTPos, Vector3.new(0, -15, 0), floorParams)
+                local floorY = (floorRay and floorRay.Position) and floorRay.Position.Y or (curTPos.Y - 2.8)
+                local safeAttackY = math.max(curTPos.Y + 0.6, floorY + 3.2)
 
-                hrp.CFrame = CFrame.new(attackPos) * CFrame.Angles(0, math.rad(tick() * 3600 % 360), 0)
+                -- Real-time intercept: dynamically sticks to moving/running/jumping targets
+                local lead = (curTVel.Magnitude > 0.5) and (curTVel.Unit * 0.45) or Vector3.zero
+                local attackPos = Vector3.new(curTPos.X + lead.X, safeAttackY, curTPos.Z + lead.Z)
 
-                -- Ram velocity towards target direction
-                local curPunchDir = (tPos - homeCF.Position).Unit
-                if curPunchDir.Magnitude < 0.1 then curPunchDir = homeCF.LookVector end
-                hrp.AssemblyLinearVelocity = curPunchDir * 160 + Vector3.new(0, 80, 0)
+                -- Dynamic micro-oscillation inside target hitbox for multi-angle physical impacts
+                local oscX = math.sin(tick() * 45) * 0.35
+                local oscZ = math.cos(tick() * 45) * 0.35
+                hrp.CFrame = CFrame.new(attackPos.X + oscX, attackPos.Y, attackPos.Z + oscZ) * CFrame.Angles(0, math.rad(tick() * 3600 % 360), 0)
 
-                -- Rapid-fire tool activation every frame for maximum damage!
+                -- Safe anti-cheat linear velocity (matches target's movement to avoid speed kicks)
+                local punchDir = (curTPos - homeCF.Position).Unit
+                if punchDir.Magnitude < 0.1 then punchDir = homeCF.LookVector end
+                local safeLinearSpeed = math.clamp(curTVel.Magnitude, 12, 28)
+                hrp.AssemblyLinearVelocity = punchDir * safeLinearSpeed + Vector3.new(0, 8, 0)
+
+                -- 1. Rapid-Fire Weapon Activation
                 for _, item in pairs(char:GetChildren()) do
                     if item:IsA("Tool") then
                         pcall(function() item:Activate() end)
+                        -- Trigger tool sub-remotes if present inside tool
+                        for _, r in pairs(item:GetDescendants()) do
+                            if r:IsA("RemoteEvent") then
+                                pcall(function() r:FireServer(targetCharacter, targetPart) end)
+                                pcall(function() r:FireServer() end)
+                            end
+                        end
                     end
                 end
 
-                -- Exploit touch interest if supported by executor for guaranteed damage
+                -- 2. Combat Remotes Scan & Fire
                 pcall(function()
-                    if firetouchinterest then
-                        local tool = char:FindFirstChildOfClass("Tool")
-                        local handle = tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart"))
-                        local rHand = char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm")
-                        if handle then
-                            firetouchinterest(handle, targetPart, 0)
-                            firetouchinterest(handle, targetPart, 1)
-                        end
-                        if rHand then
-                            firetouchinterest(rHand, targetPart, 0)
-                            firetouchinterest(rHand, targetPart, 1)
+                    local combatKeywords = {"punch", "attack", "hit", "damage", "swing", "slash", "combat", "melee", "m1"}
+                    local rep = game:GetService("ReplicatedStorage")
+                    for _, inst in pairs(rep:GetChildren()) do
+                        if inst:IsA("RemoteEvent") then
+                            local lName = string.lower(inst.Name)
+                            for _, kw in ipairs(combatKeywords) do
+                                if string.find(lName, kw) then
+                                    pcall(function() inst:FireServer(targetCharacter, targetPart) end)
+                                    pcall(function() inst:FireServer("Punch", targetCharacter) end)
+                                    pcall(function() inst:FireServer() end)
+                                    break
+                                end
+                            end
                         end
                     end
                 end)
 
-                -- If target gets blasted into orbit, break early
-                if tVel.Magnitude > 180 then
-                    break
-                end
+                -- 3. Exploit Touch Interest Multi-Hit
+                pcall(function()
+                    if firetouchinterest then
+                        local tool = char:FindFirstChildOfClass("Tool")
+                        local weaponParts = {
+                            tool and (tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")),
+                            char:FindFirstChild("RightHand"),
+                            char:FindFirstChild("Right Arm"),
+                            char:FindFirstChild("LeftHand"),
+                            char:FindFirstChild("Left Arm")
+                        }
+                        touchCycle = (touchCycle + 1) % 2
+                        for _, wPart in ipairs(weaponParts) do
+                            if wPart then
+                                for _, tp in ipairs(targetHitParts) do
+                                    if tp and tp.Parent then
+                                        firetouchinterest(wPart, tp, touchCycle)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
 
                 RunService.Heartbeat:Wait()
             end
 
-            -- G. SAFE RESTORATION & RETURN HOME
+            -- F. SAFE RESTORATION & RETURN HOME
             bav:Destroy()
             noclipConn:Disconnect()
 
-            -- Restore target hitbox
-            pcall(function()
-                if targetPart and targetPart.Parent then
-                    targetPart.Size = origTargetSize
-                    targetPart.CanCollide = origTargetCanCollide
+            -- Restore target hitboxes
+            for p, size in pairs(origSizes) do
+                if p and p.Parent then
+                    pcall(function() p.Size = size end)
                 end
-            end)
+            end
+            for p, coll in pairs(origCollides) do
+                if p and p.Parent then
+                    pcall(function() p.CanCollide = coll end)
+                end
+            end
+            for p, tch in pairs(origTargetCanTouch) do
+                if p and p.Parent then
+                    pcall(function() p.CanTouch = tch end)
+                end
+            end
 
-            -- Restore CanTouch
+            -- Restore player CanTouch
             for p, touch in pairs(origCanTouch) do
                 if p and p.Parent then
                     pcall(function() p.CanTouch = touch end)
                 end
             end
 
-            -- Zero velocities BEFORE teleporting back
+            -- Complete velocity neutralization BEFORE teleporting back
             hrp.AssemblyLinearVelocity = Vector3.zero
             hrp.AssemblyAngularVelocity = Vector3.zero
 
-            -- Return slightly above home position to prevent clipping into floor
-            hrp.CFrame = homeCF + Vector3.new(0, 0.4, 0)
+            -- Return slightly elevated above home position
+            hrp.CFrame = homeCF + Vector3.new(0, 1.2, 0)
             hrp.AssemblyLinearVelocity = Vector3.zero
             hrp.AssemblyAngularVelocity = Vector3.zero
 
             humanoid.PlatformStand = false
             pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) end)
 
-            -- Keep godmode and state protections active briefly during landing
-            task.delay(0.35, function()
+            -- Keep godmode and state protections active for 0.7s to absorb any ground landing or fall impact
+            task.delay(0.7, function()
                 if godConn then
                     godConn:Disconnect()
                     godConn = nil
@@ -1002,6 +1074,13 @@ local function performSuperPunch()
 end
 
 PunchBtn.MouseButton1Click:Connect(performSuperPunch)
+
+-- Keybind support: Press F on PC to trigger Super Punch!
+registerConn(UserInputService.InputBegan:Connect(function(input, gpe)
+    if not gpe and State.PunchEnabled and input.KeyCode == Enum.KeyCode.F then
+        performSuperPunch()
+    end
+end))
 
 addModuleToggle(rageScroll, "Super Punch 🥊", false, function(enabled)
     State.PunchEnabled = enabled
@@ -1081,9 +1160,9 @@ end))
 
 -- =========================================================
 -- SMART 3D TUX PENGUIN COMPANION PET 🐧
--- Fully procedural 3D chibi model with ground raycasting,
--- real waddling physics, high-speed belly-sliding on ice,
--- sleeping Zzz, click-to-pet backflip & punch cheering!
+-- Fully procedural 3D chibi model parented to Workspace!
+-- Real ground raycasting, waddling physics, high-speed
+-- ice belly-sliding, sleeping Zzz, click-to-pet backflip & punch cheering!
 -- =========================================================
 local petModel = nil
 local petLoopConn = nil
@@ -1114,12 +1193,10 @@ local function spawnSmartTuxPet()
     local playerHrp = char:FindFirstChild("HumanoidRootPart")
     if not playerHrp then return end
 
-    local cam = Workspace.CurrentCamera or Workspace
-
-    -- Container model parented to Camera (immune to workspace cleanup scripts & anticheat)
+    -- Container model parented directly to Workspace (guarantees 100% rendering & ClickDetector support!)
     petModel = Instance.new("Model")
     petModel.Name = "TuxSmartPet"
-    petModel.Parent = cam
+    petModel.Parent = Workspace
     registerInst(petModel)
 
     -- Invisible root
@@ -1278,7 +1355,7 @@ local function spawnSmartTuxPet()
     local isCheering = false
     local cheerTimer = 0
     local lastMoveTime = tick()
-    local currentPetPos = playerHrp.Position - (playerHrp.CFrame.LookVector * 3.8) + (playerHrp.CFrame.RightVector * 2.4)
+    local currentPetPos = playerHrp.Position - (playerHrp.CFrame.LookVector * 3.5) + (playerHrp.CFrame.RightVector * 2.2)
     local walkClock = 0
     local pettedUntil = 0
 
@@ -1341,17 +1418,17 @@ local function spawnSmartTuxPet()
     -- Downward raycast for realistic ground walking
     local rayParams = RaycastParams.new()
     rayParams.FilterType = RaycastFilterType.Exclude
-    rayParams.FilterDescendantsInstances = {char, petModel}
     rayParams.IgnoreWater = true
 
-    local function getGroundPos(targetXZ, playerY)
-        local rayOrigin = Vector3.new(targetXZ.X, playerY + 5, targetXZ.Z)
-        local rayDir = Vector3.new(0, -30, 0)
+    local function getGroundPos(targetXZ, playerY, activeChar)
+        rayParams.FilterDescendantsInstances = {activeChar or char, petModel}
+        local rayOrigin = Vector3.new(targetXZ.X, playerY + 2.5, targetXZ.Z)
+        local rayDir = Vector3.new(0, -20, 0)
         local hit = Workspace:Raycast(rayOrigin, rayDir, rayParams)
         if hit and hit.Position and typeof(hit.Position) == "Vector3" then
-            return hit.Position.Y + 1.05
+            return hit.Position.Y + 0.95
         else
-            return playerY - 1.95
+            return playerY - 2.05
         end
     end
 
@@ -1398,15 +1475,21 @@ local function spawnSmartTuxPet()
             return
         end
 
+        -- Frame Guardian: If pet was deleted by any game script, respawn instantly!
+        if not petModel or not petModel.Parent or not petModel:IsDescendantOf(Workspace) then
+            spawnSmartTuxPet()
+            return
+        end
+
         local currentChar = LocalPlayer.Character
         if not currentChar then return end
         local hrp = currentChar:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
 
-        -- Target spot: 3.8 studs behind and 2.4 studs to the right of player
-        local targetOffset = -hrp.CFrame.LookVector * 3.8 + hrp.CFrame.RightVector * 2.4
+        -- Target spot: 3.5 studs behind and 2.2 studs to the right of player
+        local targetOffset = -hrp.CFrame.LookVector * 3.5 + hrp.CFrame.RightVector * 2.2
         local targetXZ = hrp.Position + targetOffset
-        local groundY = getGroundPos(targetXZ, hrp.Position.Y)
+        local groundY = getGroundPos(targetXZ, hrp.Position.Y, currentChar)
         local targetGround = Vector3.new(targetXZ.X, groundY, targetXZ.Z)
 
         local distToTarget = (currentPetPos - targetGround).Magnitude
@@ -1414,13 +1497,13 @@ local function spawnSmartTuxPet()
         local playerSpeed = hrp.AssemblyLinearVelocity.Magnitude
 
         -- If too far away (teleport / respawn), snap instantly
-        if distToPlayer > 45 or distToTarget > 50 then
+        if distToPlayer > 40 or distToTarget > 45 then
             currentPetPos = targetGround
+        else
+            -- Smooth position interpolation
+            local lerpAlpha = math.clamp(dt * 8.5, 0, 1)
+            currentPetPos = currentPetPos:Lerp(targetGround, lerpAlpha)
         end
-
-        -- Smooth position interpolation
-        local lerpAlpha = math.clamp(dt * 7.5, 0, 1)
-        currentPetPos = currentPetPos:Lerp(targetGround, lerpAlpha)
 
         -- Determine look angle via trigonometry (100% NaN-safe!)
         local _, playerYaw, _ = hrp.CFrame:ToOrientation()
@@ -1429,11 +1512,11 @@ local function spawnSmartTuxPet()
         local horizDist = math.sqrt(moveDX * moveDX + moveDZ * moveDZ)
 
         local petYaw = playerYaw
-        if horizDist > 0.35 then
+        if horizDist > 0.25 then
             petYaw = math.atan2(-moveDX, -moveDZ)
         end
 
-        -- Handle Backflip Priority State
+        -- Handle Backflip Priority State (Click-to-Pet)
         if isBackflipping and backflipTimer > 0 then
             backflipTimer = backflipTimer - dt
             local alpha = 1 - (backflipTimer / 0.65)
@@ -1484,8 +1567,8 @@ local function spawnSmartTuxPet()
             return
         end
 
-        -- Mode 1: Belly-Sliding (Speed > 24 or fast catch-up)
-        if playerSpeed > 24 or (distToTarget > 12 and playerSpeed > 10) then
+        -- Mode 1: High-Speed Ice Belly-Sliding (Speed > 22 or catch-up)
+        if playerSpeed > 22 or (distToTarget > 10 and playerSpeed > 8) then
             lastMoveTime = now
             slideEmitter.Enabled = true
 
@@ -1504,8 +1587,8 @@ local function spawnSmartTuxPet()
                 CFrame.Angles(math.rad(60), 0, 0)
             )
 
-        -- Mode 2: Waddling Walk (Normal following)
-        elseif distToTarget > 0.8 then
+        -- Mode 2: Waddling Walk (Active movement following player)
+        elseif distToTarget > 0.35 or playerSpeed > 1.2 then
             lastMoveTime = now
             slideEmitter.Enabled = false
             walkClock = walkClock + dt * 11
@@ -1572,8 +1655,9 @@ end
 
 -- Automatic respawn support so Tux never disappears upon player death/respawn
 if not petCharAddedConn then
-    petCharAddedConn = registerConn(LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(0.6)
+    petCharAddedConn = registerConn(LocalPlayer.CharacterAdded:Connect(function(newChar)
+        pcall(function() newChar:WaitForChild("HumanoidRootPart", 5) end)
+        task.wait(0.4)
         if State.TuxPet then
             spawnSmartTuxPet()
         end
