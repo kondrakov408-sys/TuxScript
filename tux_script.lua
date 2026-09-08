@@ -705,36 +705,25 @@ local function performSuperPunch()
         end
     end)
 
-    -- 2. Detect Closest Target Player (Expanded Range: 300 studs, multi-part fallback for R6 & R15)
-    local targetPart = nil
-    local closestDist = 300
+    -- 2. Detect Closest Target Player (Range: 150 studs)
+    local targetHrp = nil
+    local closestDist = 150
 
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
-            -- Fallback across HumanoidRootPart, Torso, or UpperTorso to hit custom / non-standard avatars
-            local tPart = player.Character:FindFirstChild("HumanoidRootPart") 
-                or player.Character:FindFirstChild("Torso") 
-                or player.Character:FindFirstChild("UpperTorso")
-                or player.Character:FindFirstChildOfClass("BasePart")
-
-            local tHum = player.Character:FindFirstChildOfClass("Humanoid")
-            
-            if tPart then
-                -- Target is valid if Humanoid health > 0 or if Humanoid is non-standard
-                local isAlive = not tHum or tHum.Health > 0
-                if isAlive then
-                    local dist = (tPart.Position - hrp.Position).Magnitude
-                    if dist < closestDist then
-                        closestDist = dist
-                        targetPart = tPart
-                    end
+            local tHrp = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("Torso")
+            if tHrp then
+                local dist = (tHrp.Position - hrp.Position).Magnitude
+                if dist < closestDist then
+                    closestDist = dist
+                    targetHrp = tHrp
                 end
             end
         end
     end
 
-    -- 3. Execute Pure Rotational Spin Fling (Support Non-Standard Avatars)
-    if targetPart and targetPart.Parent then
+    -- 3. Execute Pure Rotational Spin Fling
+    if targetHrp and targetHrp.Parent then
         local oldCF = hrp.CFrame
 
         -- Save & Protect Humanoid Health / Dead States so LocalPlayer cannot die
@@ -761,22 +750,11 @@ local function performSuperPunch()
         bav.AngularVelocity = Vector3.new(0, 999999, 0)
         bav.Parent = hrp
 
-        -- Extended Contact Window (0.22s) with Predictive CFrame offset & Collision Force
+        -- Contact Window (0.20s) - Direct positioning on target
         local startTime = tick()
-        while tick() - startTime < 0.22 do
-            if targetPart and targetPart.Parent then
-                -- Force target part collide & touch state to bypass non-collidable avatars
-                pcall(function()
-                    targetPart.CanCollide = true
-                    if targetPart.Parent:FindFirstChild("HumanoidRootPart") then
-                        targetPart.Parent.HumanoidRootPart.CanCollide = true
-                    end
-                end)
-
-                -- Target velocity prediction offset ensures direct contact on moving players!
-                local tVel = targetPart.AssemblyLinearVelocity
-                local predictOffset = (tVel.Magnitude > 2) and (tVel * 0.035) or Vector3.zero
-                hrp.CFrame = targetPart.CFrame + predictOffset
+        while tick() - startTime < 0.20 do
+            if targetHrp and targetHrp.Parent then
+                hrp.CFrame = targetHrp.CFrame
                 hrp.AssemblyLinearVelocity = Vector3.zero
             else
                 break
