@@ -852,16 +852,13 @@ local function performSuperPunch()
                 end
             end
 
-            -- Stepped collision: Torso and HRP collide with target, limbs & feet CanCollide=false to prevent any floor snagging
+            -- Stepped collision: Complete noclip on all local character parts during punch
+            -- This guarantees our character can NEVER be flung into the stratosphere by physics collision!
             local noclipConn = RunService.Stepped:Connect(function()
                 if char and char.Parent then
                     for _, p in pairs(char:GetDescendants()) do
                         if p:IsA("BasePart") then
-                            if p == hrp or p.Name == "Torso" or p.Name == "UpperTorso" then
-                                p.CanCollide = true
-                            else
-                                p.CanCollide = false
-                            end
+                            p.CanCollide = false
                         end
                     end
                 end
@@ -892,22 +889,13 @@ local function performSuperPunch()
                 origCollides[p] = p.CanCollide
                 origTargetCanTouch[p] = p.CanTouch
                 pcall(function()
-                    p.Size = Vector3.new(22, 22, 22)
-                    p.CanCollide = true
+                    p.Size = Vector3.new(20, 20, 20)
+                    p.CanCollide = false -- Keep CanCollide=false to prevent physics explosion ejections!
                     p.CanTouch = true
                 end)
             end
 
-            -- D. ANTI-CHEAT SAFE ROTATIONAL TORQUE FLING ENGINE
-            -- Spun on Y-axis for maximum centrifugal throw without triggering linear velocity anti-cheats
-            local bav = Instance.new("BodyAngularVelocity")
-            bav.Name = "TuxPunchTorque"
-            bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-            bav.AngularVelocity = Vector3.new(1500, 18000, 1500)
-            bav.P = math.huge
-            bav.Parent = hrp
-
-            -- E. DEVASTATING CONTINUOUS COMBO LOOP (0.65s duration for 6-10 full hit cycles)
+            -- D. DEVASTATING CONTINUOUS COMBO LOOP (0.65s duration for 6-10 full hit cycles)
             local strikeDuration = 0.65
             local strikeStart = tick()
 
@@ -930,22 +918,23 @@ local function performSuperPunch()
                 -- Detect real ground height below target to guarantee our feet hover safely above the floor
                 local floorRay = Workspace:Raycast(curTPos, Vector3.new(0, -15, 0), floorParams)
                 local floorY = (floorRay and floorRay.Position) and floorRay.Position.Y or (curTPos.Y - 2.8)
-                local safeAttackY = math.max(curTPos.Y + 0.6, floorY + 3.2)
+                local safeAttackY = math.max(curTPos.Y + 0.5, floorY + 3.0)
 
-                -- Real-time intercept: dynamically sticks to moving/running/jumping targets
-                local lead = (curTVel.Magnitude > 0.5) and (curTVel.Unit * 0.45) or Vector3.zero
-                local attackPos = Vector3.new(curTPos.X + lead.X, safeAttackY, curTPos.Z + lead.Z)
+                -- Position ourselves 2.2 studs directly in front of the target, facing them
+                local offsetDir = homeCF.Position - curTPos
+                local offsetXZ = Vector3.new(offsetDir.X, 0, offsetDir.Z)
+                if offsetXZ.Magnitude > 0.1 then
+                    offsetXZ = offsetXZ.Unit
+                else
+                    offsetXZ = -targetPart.CFrame.LookVector
+                end
 
-                -- Dynamic micro-oscillation inside target hitbox for multi-angle physical impacts
-                local oscX = math.sin(tick() * 45) * 0.35
-                local oscZ = math.cos(tick() * 45) * 0.35
-                hrp.CFrame = CFrame.new(attackPos.X + oscX, attackPos.Y, attackPos.Z + oscZ) * CFrame.Angles(0, math.rad(tick() * 3600 % 360), 0)
+                local attackPos = Vector3.new(curTPos.X + offsetXZ.X * 2.2, safeAttackY, curTPos.Z + offsetXZ.Z * 2.2)
 
-                -- Safe anti-cheat linear velocity (matches target's movement to avoid speed kicks)
-                local punchDir = (curTPos - homeCF.Position).Unit
-                if punchDir.Magnitude < 0.1 then punchDir = homeCF.LookVector end
-                local safeLinearSpeed = math.clamp(curTVel.Magnitude, 12, 28)
-                hrp.AssemblyLinearVelocity = punchDir * safeLinearSpeed + Vector3.new(0, 8, 0)
+                -- Stable orientation directly facing the target (no wild centrifuge spinning!)
+                hrp.CFrame = CFrame.lookAt(attackPos, Vector3.new(curTPos.X, safeAttackY, curTPos.Z))
+                hrp.AssemblyLinearVelocity = curTVel
+                hrp.AssemblyAngularVelocity = Vector3.zero
 
                 -- 1. Rapid-Fire Weapon Activation
                 for _, item in pairs(char:GetChildren()) do
@@ -1007,8 +996,7 @@ local function performSuperPunch()
                 RunService.Heartbeat:Wait()
             end
 
-            -- F. SAFE RESTORATION & RETURN HOME
-            bav:Destroy()
+            -- E. SAFE RESTORATION & RETURN HOME
             noclipConn:Disconnect()
 
             -- Restore target hitboxes
@@ -1040,7 +1028,7 @@ local function performSuperPunch()
             hrp.AssemblyAngularVelocity = Vector3.zero
 
             -- Return slightly elevated above home position
-            hrp.CFrame = homeCF + Vector3.new(0, 1.2, 0)
+            hrp.CFrame = homeCF + Vector3.new(0, 0.5, 0)
             hrp.AssemblyLinearVelocity = Vector3.zero
             hrp.AssemblyAngularVelocity = Vector3.zero
 
