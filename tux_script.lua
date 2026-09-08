@@ -14,7 +14,7 @@ local State = {
     NoClip = false,
     ESP = false,
     Fly = false,
-    FlySpeed = 50
+    FlySpeed = 60
 }
 
 -- Target GUI Parent (CoreGui preferred for executors, fallback PlayerGui)
@@ -197,7 +197,7 @@ createToggleButton("ESP 👁️", false, function(enabled)
     end
 end)
 
--- 3. Fly (PlatformStand + Camera Vector)
+-- 3. Modern Bypass CFrame Fly
 local flyConn
 createToggleButton("Fly 🕊️", false, function(enabled)
     State.Fly = enabled
@@ -207,57 +207,58 @@ createToggleButton("Fly 🕊️", false, function(enabled)
     local hrp = char:FindFirstChild("HumanoidRootPart")
 
     if enabled then
-        if humanoid then humanoid.PlatformStand = true end
-
-        local bv = hrp:FindFirstChild("TuxFlyBV") or Instance.new("BodyVelocity")
-        bv.Name = "TuxFlyBV"
-        bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-        bv.Velocity = Vector3.zero
-        bv.Parent = hrp
-
-        local bg = hrp:FindFirstChild("TuxFlyBG") or Instance.new("BodyGyro")
-        bg.Name = "TuxFlyBG"
-        bg.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-        bg.P = 9e4
-        bg.CFrame = Camera.CFrame
-        bg.Parent = hrp
-
         if flyConn then flyConn:Disconnect() end
-        flyConn = RunService.RenderStepped:Connect(function()
-            if not State.Fly or not hrp or not hrp.Parent then
+        flyConn = RunService.RenderStepped:Connect(function(dt)
+            if not State.Fly or not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 if flyConn then flyConn:Disconnect() end
+                if humanoid then humanoid.PlatformStand = false end
                 return
             end
-            if humanoid then humanoid.PlatformStand = true end
-            bg.CFrame = Camera.CFrame
 
-            local moveDir = Vector3.zero
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + Camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - Camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - Camera.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + Camera.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, 1, 0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0, 1, 0) end
+            local curChar = LocalPlayer.Character
+            local curHrp = curChar:FindFirstChild("HumanoidRootPart")
+            local curHum = curChar:FindFirstChildOfClass("Humanoid")
 
-            -- Mobile joystick support
-            if humanoid and humanoid.MoveDirection.Magnitude > 0 and moveDir == Vector3.zero then
-                moveDir = (Camera.CFrame:VectorToWorldSpace(humanoid.MoveDirection)).Unit
+            if curHum then
+                curHum.PlatformStand = true
+                curHum:ChangeState(Enum.HumanoidStateType.Swimming)
             end
 
-            bv.Velocity = moveDir * State.FlySpeed
+            if curHrp then
+                curHrp.AssemblyLinearVelocity = Vector3.zero
+                curHrp.AssemblyAngularVelocity = Vector3.zero
+
+                local moveDir = Vector3.zero
+                local camCF = Camera.CFrame
+
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camCF.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - camCF.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - camCF.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camCF.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, 1, 0) end
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0, 1, 0) end
+
+                -- Mobile Joystick Support
+                if curHum and curHum.MoveDirection.Magnitude > 0 and moveDir == Vector3.zero then
+                    moveDir = (camCF:VectorToWorldSpace(curHum.MoveDirection)).Unit
+                end
+
+                if moveDir.Magnitude > 0 then
+                    curHrp.CFrame = curHrp.CFrame + (moveDir.Unit * State.FlySpeed * dt)
+                end
+            end
         end)
     else
-        if humanoid then humanoid.PlatformStand = false end
-        if hrp then
-            if hrp:FindFirstChild("TuxFlyBV") then hrp.TuxFlyBV:Destroy() end
-            if hrp:FindFirstChild("TuxFlyBG") then hrp.TuxFlyBG:Destroy() end
-        end
         if flyConn then flyConn:Disconnect() end
+        if humanoid then
+            humanoid.PlatformStand = false
+            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end
     end
 end)
 
 ---------------------------------------------------------
--- 4. PUNCH BUTTON & DASH-FLING KNOCKBACK
+-- 4. PUNCH ACTION & ULTRA FLING KNOCKBACK
 ---------------------------------------------------------
 local PunchScreenGui = Instance.new("ScreenGui")
 PunchScreenGui.Name = "TuxPunchGui"
@@ -312,7 +313,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Procedural Arm Swing + Fling Logic
+-- Robust Punch & Fling Mechanism
 local isPunching = false
 local function performSuperPunch()
     if isPunching then return end
@@ -324,78 +325,108 @@ local function performSuperPunch()
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not humanoid then isPunching = false; return end
 
-    -- 1. Arm Swing Animation (Procedural + Track Fallback)
+    -- 1. Animation Trigger (Animator + Motor Fallback)
     task.spawn(function()
-        -- Try playing R6 / R15 Punch Animation Track
+        local animator = humanoid:FindFirstChildOfClass("Animator")
+        if not animator then
+            animator = Instance.new("Animator")
+            animator.Parent = humanoid
+        end
+
+        local anim = Instance.new("Animation")
+        -- Use standard Roblox Punch animation IDs for R15 / R6
+        if char:FindFirstChild("UpperTorso") then
+            anim.AnimationId = "rbxassetid://507770453" -- R15 Punch
+        else
+            anim.AnimationId = "rbxassetid://125750799" -- R6 Punch
+        end
+
         pcall(function()
-            local animator = humanoid:FindFirstChildOfClass("Animator") or humanoid
-            local anim = Instance.new("Animation")
-            anim.AnimationId = char:FindFirstChild("UpperTorso") and "rbxassetid://567480700" or "rbxassetid://125750799"
             local track = animator:LoadAnimation(anim)
-            track:Play()
+            track:Play(0.1, 1, 2) -- Speed up track playback
         end)
 
-        -- Procedural Arm Swing (Guaranteed Visual Feedback)
-        local rightArmMotor = char:FindFirstChild("Right Shoulder", true) or char:FindFirstChild("RightShoulder", true)
-        if rightArmMotor then
-            local origC0 = rightArmMotor.C0
-            rightArmMotor.C0 = origC0 * CFrame.Angles(math.rad(90), 0, math.rad(20))
-            task.wait(0.25)
-            rightArmMotor.C0 = origC0
+        -- Guaranteed Arm Swing Motor Rotation
+        local rightArm = char:FindFirstChild("Right Arm") or char:FindFirstChild("RightUpperArm")
+        local shoulder = char:FindFirstChild("Right Shoulder", true) or char:FindFirstChild("RightShoulder", true)
+        if shoulder then
+            local origC0 = shoulder.C0
+            shoulder.C0 = origC0 * CFrame.Angles(math.rad(110), math.rad(-20), math.rad(0))
+            task.wait(0.3)
+            shoulder.C0 = origC0
         end
     end)
 
-    -- 2. Find Closest Target Player
-    local closestTarget = nil
-    local closestDist = 35 -- Radius 35 studs
+    -- 2. Target Detection
+    local targetHrp = nil
+    local closestDist = 40 -- Radius up to 40 studs
 
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
-            local targetHrp = player.Character:FindFirstChild("HumanoidRootPart")
-            if targetHrp then
-                local dist = (targetHrp.Position - hrp.Position).Magnitude
+            local tHrp = player.Character:FindFirstChild("HumanoidRootPart")
+            if tHrp then
+                local dist = (tHrp.Position - hrp.Position).Magnitude
                 if dist < closestDist then
                     closestDist = dist
-                    closestTarget = targetHrp
+                    targetHrp = tHrp
                 end
             end
         end
     end
 
-    -- 3. Dash & Super Fling Attack into Target
-    if closestTarget then
-        local targetPos = closestTarget.Position
-        local attackDirection = (targetPos - hrp.Position).Unit
-        if attackDirection ~= attackDirection then attackDirection = hrp.CFrame.LookVector end
+    -- 3. Super Impulse Fling
+    if targetHrp then
+        local originalCF = hrp.CFrame
+        local pushDir = (targetHrp.Position - hrp.Position).Unit
+        if pushDir ~= pushDir then pushDir = hrp.CFrame.LookVector end
 
-        -- Teleport directly into target & apply extreme physics velocity/rotational collision
+        -- Save parts collision & density
+        local originalCollisions = {}
+        for _, part in pairs(char:GetChildren()) do
+            if part:IsA("BasePart") then
+                originalCollisions[part] = part.CanCollide
+                part.CanCollide = true
+                pcall(function()
+                    part.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 100, 100, 100)
+                end)
+            end
+        end
+
+        -- Spin Fling Force
         local bav = Instance.new("BodyAngularVelocity")
-        bav.Name = "TuxFlingBAV"
-        bav.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+        bav.Name = "TuxPunchFling"
+        bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
         bav.AngularVelocity = Vector3.new(0, 99999, 0)
         bav.Parent = hrp
 
-        local bv = Instance.new("BodyVelocity")
-        bv.Name = "TuxFlingBV"
-        bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-        bv.Velocity = (attackDirection * 2000) + Vector3.new(0, 800, 0)
-        bv.Parent = hrp
-
-        -- Dash into target for 0.18s
+        -- Fast dash impact phase (0.2s)
         local startTime = tick()
-        while tick() - startTime < 0.18 do
-            hrp.CFrame = closestTarget.CFrame * CFrame.new(0, 0, 0.5)
+        while tick() - startTime < 0.25 do
+            if targetHrp and targetHrp.Parent then
+                hrp.CFrame = targetHrp.CFrame * CFrame.new(0, 0, 0.2)
+                hrp.AssemblyLinearVelocity = (pushDir * 3500) + Vector3.new(0, 1500, 0)
+            end
             RunService.Heartbeat:Wait()
         end
 
-        -- Clean up fling forces
+        -- Cleanup Fling
         bav:Destroy()
-        bv:Destroy()
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
+
+        -- Return to safe nearby position
+        hrp.CFrame = originalCF
+
+        -- Restore physical properties
+        for part, canCol in pairs(originalCollisions) do
+            if part and part.Parent then
+                part.CanCollide = canCol
+                pcall(function() part.CustomPhysicalProperties = nil end)
+            end
+        end
     end
 
-    task.wait(0.1)
+    task.wait(0.15)
     isPunching = false
 end
 
