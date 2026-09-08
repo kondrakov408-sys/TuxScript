@@ -765,11 +765,11 @@ local function performSuperPunch()
             end
         end))
 
-        -- Pure Y-Axis Rotational Velocity Spin
+        -- 3D Multi-Axis Extreme Rotational Fling (Torque on X, Y, Z for airborne & fast targets)
         local bav = Instance.new("BodyAngularVelocity")
         bav.Name = "TuxPunchFlingSpin"
-        bav.MaxTorque = Vector3.new(0, math.huge, 0)
-        bav.AngularVelocity = Vector3.new(0, 999999, 0)
+        bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bav.AngularVelocity = Vector3.new(999999, 999999, 999999)
         bav.Parent = hrp
 
         -- Dynamic Contact Window for Running/Jumping targets (Up to 0.25s)
@@ -785,8 +785,8 @@ local function performSuperPunch()
                 local tVel = targetPart.AssemblyLinearVelocity
                 local tSpeed = tVel.Magnitude
 
-                -- Instant detachment if target is flung (speed > 120 studs/s)
-                if tSpeed > 120 then
+                -- Instant detachment if target is flung (speed > 100 studs/s)
+                if tSpeed > 100 then
                     break
                 end
 
@@ -800,9 +800,11 @@ local function performSuperPunch()
                     end
                 end)
 
-                -- PREDICTIVE CFRAME POSITIONING: Match target position + Velocity lead (works in air & during run)
-                local predictLead = (tSpeed > 1) and (tVel * dt * 2.2) or Vector3.zero
-                hrp.CFrame = targetPart.CFrame + predictLead
+                -- 360-degree randomized physics collision overlap (Flings jumping/running targets instantly!)
+                local randAngle = CFrame.Angles(math.rad(math.random(-180, 180)), math.rad(math.random(-180, 180)), math.rad(math.random(-180, 180)))
+                local predictLead = (tSpeed > 1) and (tVel * dt * 2.5) or Vector3.zero
+                
+                hrp.CFrame = (targetPart.CFrame + predictLead) * randAngle
                 hrp.AssemblyLinearVelocity = Vector3.zero
             else
                 break
