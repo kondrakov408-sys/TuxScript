@@ -670,7 +670,7 @@ registerConn(UserInputService.InputChanged:Connect(function(input)
     end
 end))
 
--- AUTHENTIC REPLICATED SUPER PUNCH FLING (Rotational Spin Collision & Non-Looping Animation)
+-- AUTHENTIC REPLICATED SUPER PUNCH FLING (Instant Detachment & Anti-Void Protection)
 local isPunching = false
 local function performSuperPunch()
     if isPunching then return end
@@ -712,7 +712,8 @@ local function performSuperPunch()
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local tHrp = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("Torso")
-            if tHrp then
+            local tHum = player.Character:FindFirstChildOfClass("Humanoid")
+            if tHrp and tHum and tHum.Health > 0 then
                 local dist = (tHrp.Position - hrp.Position).Magnitude
                 if dist < closestDist then
                     closestDist = dist
@@ -722,7 +723,7 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Pure Rotational Spin Fling
+    -- 3. Execute Physics Fling with Instant Detachment
     if targetHrp and targetHrp.Parent then
         local oldCF = hrp.CFrame
 
@@ -732,6 +733,17 @@ local function performSuperPunch()
 
         humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
         humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+
+        -- Temporarily disable limb collisions to prevent Motor6D joint destruction upon impact
+        local savedCollisions = {}
+        for _, part in pairs(char:GetChildren()) do
+            if part:IsA("BasePart") then
+                savedCollisions[part] = part.CanCollide
+                if part ~= hrp then
+                    part.CanCollide = false
+                end
+            end
+        end
 
         -- Health Lock Connection during contact window
         local startHealth = humanoid.Health
@@ -743,17 +755,22 @@ local function performSuperPunch()
             end
         end))
 
-        -- Pure Y-Axis Rotational Velocity (Zero Linear Velocity ensures LocalPlayer never flies away!)
+        -- Pure Y-Axis Rotational Velocity Spin
         local bav = Instance.new("BodyAngularVelocity")
         bav.Name = "TuxPunchFlingSpin"
         bav.MaxTorque = Vector3.new(0, math.huge, 0)
         bav.AngularVelocity = Vector3.new(0, 999999, 0)
         bav.Parent = hrp
 
-        -- Contact Window (0.20s) - Direct positioning on target
+        -- Fling Contact Window: Instantly detach the MOMENT target gets flung!
         local startTime = tick()
-        while tick() - startTime < 0.20 do
+        while tick() - startTime < 0.15 do
             if targetHrp and targetHrp.Parent then
+                -- CRITICAL FIX: Stop following target if target has already been launched!
+                if targetHrp.AssemblyLinearVelocity.Magnitude > 100 then
+                    break
+                end
+
                 hrp.CFrame = targetHrp.CFrame
                 hrp.AssemblyLinearVelocity = Vector3.zero
             else
@@ -766,18 +783,27 @@ local function performSuperPunch()
         bav:Destroy()
         healthLock:Disconnect()
 
-        -- INSTANT VELOCITY RESET & RECOVER LOCAL POSITION
+        -- INSTANT VELOCITY RESET & SNAP BACK TO SAFE ORIGINAL POSITION
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
         hrp.CFrame = oldCF
 
-        -- Wait 2 physics frames to clear any lingering momentum
+        -- Anchor at home position for 2 physics frames to absorb all residual momentum
+        hrp.Anchored = true
         RunService.Heartbeat:Wait()
         RunService.Heartbeat:Wait()
 
+        hrp.Anchored = false
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
         hrp.CFrame = oldCF
+
+        -- Restore original body part collisions
+        for part, canCollideState in pairs(savedCollisions) do
+            if part and part.Parent then
+                part.CanCollide = canCollideState
+            end
+        end
 
         -- Restore Humanoid Dead state after delay
         task.delay(1.0, function()
