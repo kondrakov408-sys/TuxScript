@@ -772,26 +772,37 @@ local function performSuperPunch()
         bav.AngularVelocity = Vector3.new(0, 999999, 0)
         bav.Parent = hrp
 
-        -- Universal Avatar Fling Contact Window (0.18s max)
+        -- Dynamic Contact Window for Running/Jumping targets (Up to 0.25s)
         local startTime = tick()
-        while tick() - startTime < 0.18 do
+        local lastTime = startTime
+
+        while tick() - startTime < 0.25 do
             if targetCharacter and targetCharacter.Parent and targetPart and targetPart.Parent then
-                -- Check if target has already been flung (velocity check across root part or main part)
-                local currentVel = targetPart.AssemblyLinearVelocity.Magnitude
-                if currentVel > 100 then
+                local now = tick()
+                local dt = math.clamp(now - lastTime, 0.001, 0.05)
+                lastTime = now
+
+                local tVel = targetPart.AssemblyLinearVelocity
+                local tSpeed = tVel.Magnitude
+
+                -- Instant detachment if target is flung (speed > 120 studs/s)
+                if tSpeed > 120 then
                     break
                 end
 
-                -- Force CanCollide true on target's primary parts so collision impact is 100% registered
+                -- Force CanCollide & CanTouch on target's primary parts
                 pcall(function()
                     for _, p in pairs(targetCharacter:GetChildren()) do
-                        if p:IsA("BasePart") and (p.Name == "HumanoidRootPart" or p.Name == "Torso" or p.Name == "UpperTorso" or p.Name == "LowerTorso") then
+                        if p:IsA("BasePart") then
                             p.CanCollide = true
+                            p.CanTouch = true
                         end
                     end
                 end)
 
-                hrp.CFrame = targetPart.CFrame
+                -- PREDICTIVE CFRAME POSITIONING: Match target position + Velocity lead (works in air & during run)
+                local predictLead = (tSpeed > 1) and (tVel * dt * 2.2) or Vector3.zero
+                hrp.CFrame = targetPart.CFrame + predictLead
                 hrp.AssemblyLinearVelocity = Vector3.zero
             else
                 break
