@@ -197,7 +197,7 @@ createToggleButton("ESP 👁️", false, function(enabled)
     end
 end)
 
--- 3. Modern Bypass CFrame Fly
+-- 3. UPRIGHT CFrame Fly (Character stays standing upright!)
 local flyConn
 createToggleButton("Fly 🕊️", false, function(enabled)
     State.Fly = enabled
@@ -211,7 +211,6 @@ createToggleButton("Fly 🕊️", false, function(enabled)
         flyConn = RunService.RenderStepped:Connect(function(dt)
             if not State.Fly or not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
                 if flyConn then flyConn:Disconnect() end
-                if humanoid then humanoid.PlatformStand = false end
                 return
             end
 
@@ -220,8 +219,8 @@ createToggleButton("Fly 🕊️", false, function(enabled)
             local curHum = curChar:FindFirstChildOfClass("Humanoid")
 
             if curHum then
-                curHum.PlatformStand = true
-                curHum:ChangeState(Enum.HumanoidStateType.Swimming)
+                -- Disable swimming state to prevent horizontal lying posture!
+                curHum.PlatformStand = false
             end
 
             if curHrp then
@@ -244,21 +243,20 @@ createToggleButton("Fly 🕊️", false, function(enabled)
                 end
 
                 if moveDir.Magnitude > 0 then
-                    curHrp.CFrame = curHrp.CFrame + (moveDir.Unit * State.FlySpeed * dt)
+                    -- Preserve vertical upright orientation
+                    local yawCFrame = CFrame.Angles(0, math.atan2(-camCF.LookVector.X, -camCF.LookVector.Z), 0)
+                    local nextPos = curHrp.Position + (moveDir.Unit * State.FlySpeed * dt)
+                    curHrp.CFrame = CFrame.new(nextPos) * yawCFrame
                 end
             end
         end)
     else
         if flyConn then flyConn:Disconnect() end
-        if humanoid then
-            humanoid.PlatformStand = false
-            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-        end
     end
 end)
 
 ---------------------------------------------------------
--- 4. PUNCH ACTION & ULTRA FLING KNOCKBACK
+-- 4. PUNCH BUTTON & MULTI-METHOD SUPER FLING
 ---------------------------------------------------------
 local PunchScreenGui = Instance.new("ScreenGui")
 PunchScreenGui.Name = "TuxPunchGui"
@@ -313,7 +311,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
--- Robust Punch & Fling Mechanism
+-- Multi-Technique Super Punch Fling
 local isPunching = false
 local function performSuperPunch()
     if isPunching then return end
@@ -325,41 +323,28 @@ local function performSuperPunch()
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not humanoid then isPunching = false; return end
 
-    -- 1. Animation Trigger (Animator + Motor Fallback)
+    -- 1. Visual Punch Swing (Animation + Shoulder joint motor swing)
     task.spawn(function()
-        local animator = humanoid:FindFirstChildOfClass("Animator")
-        if not animator then
-            animator = Instance.new("Animator")
-            animator.Parent = humanoid
-        end
-
-        local anim = Instance.new("Animation")
-        -- Use standard Roblox Punch animation IDs for R15 / R6
-        if char:FindFirstChild("UpperTorso") then
-            anim.AnimationId = "rbxassetid://507770453" -- R15 Punch
-        else
-            anim.AnimationId = "rbxassetid://125750799" -- R6 Punch
-        end
-
         pcall(function()
+            local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+            local anim = Instance.new("Animation")
+            anim.AnimationId = char:FindFirstChild("UpperTorso") and "rbxassetid://507770453" or "rbxassetid://125750799"
             local track = animator:LoadAnimation(anim)
-            track:Play(0.1, 1, 2) -- Speed up track playback
+            track:Play(0.05, 1, 2.5)
         end)
 
-        -- Guaranteed Arm Swing Motor Rotation
-        local rightArm = char:FindFirstChild("Right Arm") or char:FindFirstChild("RightUpperArm")
         local shoulder = char:FindFirstChild("Right Shoulder", true) or char:FindFirstChild("RightShoulder", true)
         if shoulder then
             local origC0 = shoulder.C0
-            shoulder.C0 = origC0 * CFrame.Angles(math.rad(110), math.rad(-20), math.rad(0))
-            task.wait(0.3)
+            shoulder.C0 = origC0 * CFrame.Angles(math.rad(110), math.rad(-30), 0)
+            task.wait(0.25)
             shoulder.C0 = origC0
         end
     end)
 
-    -- 2. Target Detection
+    -- 2. Detect Target Player
     local targetHrp = nil
-    local closestDist = 40 -- Radius up to 40 studs
+    local closestDist = 45
 
     for _, player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
@@ -374,56 +359,58 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Super Impulse Fling
+    -- 3. Execute Super Fling Impact (Combines 3 Fling Methods)
     if targetHrp then
-        local originalCF = hrp.CFrame
+        local origCF = hrp.CFrame
         local pushDir = (targetHrp.Position - hrp.Position).Unit
         if pushDir ~= pushDir then pushDir = hrp.CFrame.LookVector end
 
-        -- Save parts collision & density
-        local originalCollisions = {}
-        for _, part in pairs(char:GetChildren()) do
-            if part:IsA("BasePart") then
-                originalCollisions[part] = part.CanCollide
-                part.CanCollide = true
-                pcall(function()
-                    part.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 100, 100, 100)
-                end)
-            end
-        end
+        -- Create Physical Touch Block (Method 1: Heavy Impulser Block)
+        local flingPart = Instance.new("Part")
+        flingPart.Size = Vector3.new(5, 5, 5)
+        flingPart.Transparency = 1
+        flingPart.CanCollide = true
+        flingPart.Massless = false
+        flingPart.CustomPhysicalProperties = PhysicalProperties.new(100, 100, 100, 100, 100)
+        flingPart.CFrame = targetHrp.CFrame
+        flingPart.Parent = Workspace
 
-        -- Spin Fling Force
+        -- Add Extreme Angular Velocity & Velocity to Impulser
         local bav = Instance.new("BodyAngularVelocity")
-        bav.Name = "TuxPunchFling"
         bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bav.AngularVelocity = Vector3.new(0, 99999, 0)
-        bav.Parent = hrp
+        bav.AngularVelocity = Vector3.new(99999, 99999, 99999)
+        bav.Parent = flingPart
 
-        -- Fast dash impact phase (0.2s)
+        local bv = Instance.new("BodyVelocity")
+        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bv.Velocity = (pushDir * 5000) + Vector3.new(0, 2000, 0)
+        bv.Parent = flingPart
+
+        -- Method 2: Rapid Orbital Spin Teleport into Victim (0.2s)
         local startTime = tick()
-        while tick() - startTime < 0.25 do
+        local stepAngle = 0
+        while tick() - startTime < 0.22 do
+            stepAngle = stepAngle + 120
             if targetHrp and targetHrp.Parent then
-                hrp.CFrame = targetHrp.CFrame * CFrame.new(0, 0, 0.2)
-                hrp.AssemblyLinearVelocity = (pushDir * 3500) + Vector3.new(0, 1500, 0)
+                flingPart.CFrame = targetHrp.CFrame
+                hrp.CFrame = targetHrp.CFrame * CFrame.Angles(0, math.rad(stepAngle), 0) * CFrame.new(0, 0, 0.1)
+                
+                -- Method 3: Direct Velocity Overwrite (Works if network ownership granted)
+                pcall(function()
+                    targetHrp.AssemblyLinearVelocity = (pushDir * 4000) + Vector3.new(0, 2000, 0)
+                    targetHrp.AssemblyAngularVelocity = Vector3.new(9999, 9999, 9999)
+                end)
             end
             RunService.Heartbeat:Wait()
         end
 
-        -- Cleanup Fling
-        bav:Destroy()
+        -- Clean up
+        flingPart:Destroy()
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
 
-        -- Return to safe nearby position
-        hrp.CFrame = originalCF
-
-        -- Restore physical properties
-        for part, canCol in pairs(originalCollisions) do
-            if part and part.Parent then
-                part.CanCollide = canCol
-                pcall(function() part.CustomPhysicalProperties = nil end)
-            end
-        end
+        -- Return back to original position smoothly
+        hrp.CFrame = origCF
     end
 
     task.wait(0.15)
