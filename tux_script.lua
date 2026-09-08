@@ -58,6 +58,8 @@ local State = {
     -- Fun
     ClickTP = false,
     TuxPet = false,
+    TuxRide = false,
+    RideSpeed = 70,
     Gravity = 196.2,
     ChatSpam = false,
     
