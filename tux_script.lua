@@ -821,7 +821,7 @@ local function performSuperPunch()
             end
 
             -- B. IMMUNITY TO GROUND TOUCHES & SENSORS
-            -- Set CanTouch=false on ALL character parts EXCEPT weapon/fist!
+            -- Set CanTouch=false on local legs/feet to prevent any ground fall/impact damage!
             local origCanTouch = {}
             for _, p in pairs(char:GetDescendants()) do
                 if p:IsA("BasePart") then
@@ -833,24 +833,38 @@ local function performSuperPunch()
                 end
             end
 
-            -- Stepped collision: Complete noclip on local character parts during punch
-            -- Guarantees zero physical pushback, zero collision glitches, zero bounce!
-            local noclipConn = RunService.Stepped:Connect(function()
+            -- Collision setup on our character:
+            -- Torso and HRP have CanCollide=true with maximum density (100) to act as a solid battering ram!
+            -- Legs and feet have CanCollide=false so we never trip or slam into the ground!
+            local origDensity = hrp.CustomPhysicalProperties
+            pcall(function()
+                hrp.CustomPhysicalProperties = PhysicalProperties.new(100, 0.5, 0.8, 100, 1)
+            end)
+
+            local noclipLimbs = RunService.Stepped:Connect(function()
                 if char and char.Parent then
                     for _, p in pairs(char:GetDescendants()) do
                         if p:IsA("BasePart") then
-                            p.CanCollide = false
+                            if p == hrp or p.Name == "Torso" or p.Name == "UpperTorso" or p.Name == "RightHand" or p.Name == "Right Arm" then
+                                p.CanCollide = true
+                            else
+                                p.CanCollide = false
+                            end
                         end
                     end
                 end
             end)
 
-            -- C. TARGET HITBOX EXPANSION (Clean 10x10x10 touch box, no collision deformation)
+            -- C. TARGET HITBOX & KNOCKBACK PHYSICS
+            -- Expand target's core parts, set CanCollide=true, and make them ultra-light (density 0.01, elasticity 1)
+            -- This makes the enemy bounce off our heavy HRP like a rocket!
             local origSizes = {}
+            local origCollides = {}
             local origTargetCanTouch = {}
+            local origPhysProps = {}
             local targetHitParts = {}
 
-            for _, pName in ipairs({"UpperTorso", "Torso", "HumanoidRootPart", "LowerTorso", "Head"}) do
+            for _, pName in ipairs({"HumanoidRootPart", "UpperTorso", "Torso", "LowerTorso"}) do
                 local p = targetCharacter:FindFirstChild(pName)
                 if p and p:IsA("BasePart") then
                     table.insert(targetHitParts, p)
@@ -866,15 +880,19 @@ local function performSuperPunch()
 
             for _, p in ipairs(targetHitParts) do
                 origSizes[p] = p.Size
+                origCollides[p] = p.CanCollide
                 origTargetCanTouch[p] = p.CanTouch
+                origPhysProps[p] = p.CustomPhysicalProperties
                 pcall(function()
-                    p.Size = Vector3.new(10, 10, 10)
+                    p.Size = Vector3.new(8, 8, 8)
+                    p.CanCollide = true
                     p.CanTouch = true
+                    p.CustomPhysicalProperties = PhysicalProperties.new(0.01, 0, 1, 0, 1)
                 end)
             end
 
-            -- D. SNAPPY HIGH-SPEED MULTI-HIT STRIKE LOOP
-            local strikeDuration = 0.45
+            -- D. EXPLOSIVE FORWARD RAMMING PUNCH (Launches enemy across the map!)
+            local strikeDuration = 0.25
             local strikeStart = tick()
             local touchCycle = 0
 
@@ -884,28 +902,26 @@ local function performSuperPunch()
                 end
 
                 local curTPos = targetPart.Position
-
-                -- Compute position 2.5 studs in front of target, facing them at their level
                 local toTarget = curTPos - hrp.Position
-                local horizDir = Vector3.new(toTarget.X, 0, toTarget.Z)
-                if horizDir.Magnitude > 0.1 then
-                    horizDir = horizDir.Unit
+                local punchDir = Vector3.new(toTarget.X, 0, toTarget.Z)
+                if punchDir.Magnitude > 0.1 then
+                    punchDir = punchDir.Unit
                 else
-                    horizDir = -targetPart.CFrame.LookVector
+                    punchDir = hrp.CFrame.LookVector
                 end
 
-                local attackPos = Vector3.new(curTPos.X - horizDir.X * 2.5, curTPos.Y, curTPos.Z - horizDir.Z * 2.5)
+                -- Strike from the front: ram directly into the enemy's torso
+                local strikePos = curTPos - punchDir * 0.8
+                hrp.CFrame = CFrame.lookAt(strikePos, curTPos + punchDir * 5)
 
-                -- Stable orientation facing the target, keeping feet grounded and balanced
-                hrp.CFrame = CFrame.lookAt(attackPos, Vector3.new(curTPos.X, attackPos.Y, curTPos.Z))
-                hrp.AssemblyLinearVelocity = Vector3.zero
-                hrp.AssemblyAngularVelocity = Vector3.zero
+                -- Massive forward and upward momentum that sends the light enemy flying!
+                hrp.AssemblyLinearVelocity = punchDir * 125 + Vector3.new(0, 45, 0)
+                hrp.AssemblyAngularVelocity = Vector3.new(0, 2500, 0)
 
-                -- 1. Rapid-Fire Weapon Activation
+                -- 1. Tool Activation
                 for _, item in pairs(char:GetChildren()) do
                     if item:IsA("Tool") then
                         pcall(function() item:Activate() end)
-                        -- Trigger tool sub-remotes if present inside tool
                         for _, r in pairs(item:GetDescendants()) do
                             if r:IsA("RemoteEvent") then
                                 pcall(function() r:FireServer(targetCharacter, targetPart) end)
@@ -915,7 +931,7 @@ local function performSuperPunch()
                     end
                 end
 
-                -- 2. Combat Remotes Scan & Fire
+                -- 2. Combat Remotes
                 pcall(function()
                     local combatKeywords = {"punch", "attack", "hit", "damage", "swing", "slash", "combat", "melee", "m1"}
                     local rep = game:GetService("ReplicatedStorage")
@@ -961,8 +977,15 @@ local function performSuperPunch()
                 RunService.Heartbeat:Wait()
             end
 
-            -- E. SAFE RESTORATION - STAY WITH THE TARGET, NO BACKWARD TELEPORT, NO BOUNCE!
-            noclipConn:Disconnect()
+            -- E. CLEAN STOP RIGHT WHERE YOU PUNCHED - ZERO RECOIL ON YOU!
+            noclipLimbs:Disconnect()
+
+            -- Neutralize our velocities instantly so we halt right in place!
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            pcall(function()
+                hrp.CustomPhysicalProperties = origDensity
+            end)
 
             -- Restore target hitboxes
             for p, size in pairs(origSizes) do
@@ -970,9 +993,19 @@ local function performSuperPunch()
                     pcall(function() p.Size = size end)
                 end
             end
+            for p, coll in pairs(origCollides) do
+                if p and p.Parent then
+                    pcall(function() p.CanCollide = coll end)
+                end
+            end
             for p, tch in pairs(origTargetCanTouch) do
                 if p and p.Parent then
                     pcall(function() p.CanTouch = tch end)
+                end
+            end
+            for p, prop in pairs(origPhysProps) do
+                if p and p.Parent then
+                    pcall(function() p.CustomPhysicalProperties = prop end)
                 end
             end
 
@@ -983,11 +1016,7 @@ local function performSuperPunch()
                 end
             end
 
-            -- Completely neutralize all velocities: player stays firmly on their feet right here!
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-
-            -- Keep godmode protection active for 0.5s to absorb any counter-attacks
+            -- Keep godmode protection active for 0.5s
             task.delay(0.5, function()
                 if godConn then
                     godConn:Disconnect()
