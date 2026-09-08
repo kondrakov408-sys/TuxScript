@@ -734,16 +734,54 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Ultra-Safe Anti-Cheat Proof Fling Engine
+    -- 3. Robust Fling Engine with Hitbox Expansion & Motion Lead (Fall Damage Protected)
     if targetCharacter and targetPart and targetCharacter.Parent then
         local homeCF = hrp.CFrame
 
-        -- 1. Standard safe velocity bypass values (No BodyVelocity/BodyAngularVelocity mutations on local character to trigger AC)
-        local origVel = hrp.AssemblyLinearVelocity
-        local origRot = hrp.AssemblyAngularVelocity
+        -- Save & Protect Humanoid state safely (Bypasses Fall Damage / Touch Damage)
+        local origDeadState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead)
+        local origFallingState = humanoid:GetStateEnabled(Enum.HumanoidStateType.FallingDown)
+        local origRagdollState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Ragdoll)
+        local origPhysicsState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Physics)
 
-        -- Clean Heartbeat loop: Lock local player safely using CFrame interpolation without changing server-flagged assembly velocities
-        local duration = 0.35
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+        humanoid.PlatformStand = true
+
+        -- Active Health Lock & Touch Damage Invulnerability Guard
+        local startHealth = humanoid.Health
+        local healthLock = registerConn(RunService.Heartbeat:Connect(function()
+            if humanoid and humanoid.Parent then
+                if humanoid.Health < startHealth then
+                    humanoid.Health = startHealth
+                end
+            end
+        end))
+
+        -- Temporary Hitbox Expansion on target for 100% collision delivery
+        local origTargetSize = targetPart.Size
+        local origTargetCanCollide = targetPart.CanCollide
+        pcall(function()
+            targetPart.Size = Vector3.new(10, 10, 10)
+            targetPart.CanCollide = true
+        end)
+
+        -- Rotational Torque Force
+        local bav = Instance.new("BodyAngularVelocity")
+        bav.Name = "TuxPunchSpin"
+        bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bav.AngularVelocity = Vector3.new(0, 12000, 0)
+        bav.Parent = hrp
+
+        local bvl = Instance.new("BodyVelocity")
+        bvl.Name = "TuxPunchVel"
+        bvl.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        bvl.Velocity = Vector3.new(0, 0, 0)
+        bvl.Parent = hrp
+
+        local duration = 0.45
         local startTime = tick()
 
         while tick() - startTime < duration do
@@ -753,34 +791,59 @@ local function performSuperPunch()
 
             local tPos = targetPart.Position
             local tVel = targetPart.AssemblyLinearVelocity
+            local tHum = targetCharacter:FindFirstChildOfClass("Humanoid")
 
-            -- Natural position lock directly on target position
-            local targetCFrame = CFrame.new(tPos) * CFrame.Angles(0, math.rad(tick() * 1800 % 360), 0)
-            
-            -- Set CFrame safely without modifying physical properties or creating illegal body objects
-            hrp.CFrame = targetCFrame
+            -- Motion prediction
+            local moveVector = tVel
+            if tHum and tHum.MoveDirection.Magnitude > 0 then
+                moveVector = moveVector + (tHum.MoveDirection * (tHum.WalkSpeed or 16))
+            end
 
-            -- Apply standard spin force purely on local physics Assembly (safe threshold)
-            hrp.AssemblyAngularVelocity = Vector3.new(0, 3000, 0)
-            hrp.AssemblyLinearVelocity = Vector3.new(0, 50, 0)
+            -- Float 1.5 studs ABOVE the target's center so HRP never hits the ground mesh directly!
+            local predictedPos = tPos + (moveVector * 0.1) + Vector3.new(0, 1.5, 0)
 
-            if tVel.Magnitude > 60 then
+            -- Keep local character slightly elevated above floor
+            hrp.CFrame = CFrame.new(predictedPos) * CFrame.Angles(0, math.rad(math.random(-180, 180)), 0)
+            bvl.Velocity = moveVector * 1.2
+
+            -- Protect local humanoid from taking physics fall impact
+            humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+
+            if tVel.Magnitude > 75 then
                 break
             end
 
             RunService.Heartbeat:Wait()
         end
 
-        -- Safe Return Home & Instant Velocity Reset
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        hrp.CFrame = homeCF
+        -- Clean up body forces
+        bav:Destroy()
+        bvl:Destroy()
 
-        -- Double Heartbeat reset to ensure smooth server state
-        RunService.Heartbeat:Wait()
-        hrp.CFrame = homeCF
+        -- Restore original target size/collision
+        pcall(function()
+            if targetPart and targetPart.Parent then
+                targetPart.Size = origTargetSize
+                targetPart.CanCollide = origTargetCanCollide
+            end
+        end)
+
+        -- Safe Return Home & Restore States
+        healthLock:Disconnect()
+
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
+        hrp.CFrame = homeCF
+        humanoid.PlatformStand = false
+
+        task.delay(0.2, function()
+            if humanoid and humanoid.Parent then
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, origDeadState)
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, origFallingState)
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, origRagdollState)
+                humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, origPhysicsState)
+            end
+        end)
     end
 
     task.wait(0.1)
