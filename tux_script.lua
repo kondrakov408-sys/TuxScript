@@ -670,7 +670,7 @@ registerConn(UserInputService.InputChanged:Connect(function(input)
     end
 end))
 
--- SAFE & POWERFUL KNOCKBACK / SUPER PUNCH ENGINE
+-- ANTI-CHEAT BYPASS SUPER PUNCH ENGINE (Replicated Kinetic Glove Impact)
 local isPunching = false
 local function performSuperPunch()
     if isPunching then return end
@@ -682,7 +682,7 @@ local function performSuperPunch()
     local humanoid = char:FindFirstChildOfClass("Humanoid")
     if not hrp or not humanoid then isPunching = false; return end
 
-    -- 1. Visual Arm Swing Animation & Punch Effect
+    -- 1. Visual Arm Swing Animation
     task.spawn(function()
         pcall(function()
             local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
@@ -718,69 +718,60 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Perform Replicated Physics Knockback / Fling
+    -- 3. Execute Replicated Glove Impact (Bypasses HRP Anti-Cheat & Protects Local Player)
     if targetHrp and targetHrp.Parent then
-        local oldCF = hrp.CFrame
         local pushDir = (targetHrp.Position - hrp.Position).Unit
         if pushDir ~= pushDir or pushDir.Magnitude == 0 then pushDir = hrp.CFrame.LookVector end
 
-        -- Save body collisions of local character
-        local savedCollisions = {}
-        for _, part in pairs(char:GetChildren()) do
-            if part:IsA("BasePart") then
-                savedCollisions[part] = part.CanCollide
-                -- Turn off collision for limbs so local character joints aren't damaged
-                if part ~= hrp then
-                    part.CanCollide = false
-                end
+        -- Create Replicated Kinetic Glove Part inside Character (inherits Network Ownership)
+        local glove = Instance.new("Part")
+        glove.Name = "TuxPunchGlove"
+        glove.Shape = Enum.PartType.Ball
+        glove.Size = Vector3.new(6, 6, 6)
+        glove.Color = currentTheme.Accent
+        glove.Material = Enum.Material.Neon
+        glove.Transparency = 0.3
+        glove.CanCollide = true
+        glove.CanTouch = true
+        glove.Massless = true
+        glove.CustomPhysicalProperties = PhysicalProperties.new(100, 1, 1, 1, 1)
+        glove.CFrame = targetHrp.CFrame
+        glove.Parent = char
+
+        -- Prevent Glove from colliding with Local Player's own character
+        for _, localPart in pairs(char:GetChildren()) do
+            if localPart:IsA("BasePart") then
+                local ncc = Instance.new("NoCollisionConstraint")
+                ncc.Part0 = glove
+                ncc.Part1 = localPart
+                ncc.Parent = glove
             end
         end
 
-        -- Ensure HRP stays collidable & touchable
-        hrp.CanTouch = true
-        hrp.CanCollide = true
-
-        -- Create maximum fling angular velocity
+        -- Angular Spin on Glove for Maximum Physics Momentum Transfer
         local bav = Instance.new("BodyAngularVelocity")
-        bav.Name = "TuxPunchSpin"
+        bav.Name = "TuxGloveSpin"
         bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
         bav.AngularVelocity = Vector3.new(0, 99999, 0)
-        bav.Parent = hrp
+        bav.Parent = glove
 
-        -- Fast 0.15 second physics impact window
-        local flingForce = (pushDir * 12000) + Vector3.new(0, 6000, 0)
+        -- High-Velocity Impact Impulse Vector
+        local knockbackVector = (pushDir * 12000) + Vector3.new(0, 5000, 0)
         local startTime = tick()
-        while tick() - startTime < 0.15 do
-            if targetHrp and targetHrp.Parent then
+
+        while tick() - startTime < 0.18 do
+            if targetHrp and targetHrp.Parent and glove and glove.Parent then
                 targetHrp.CanCollide = true
-                hrp.CFrame = targetHrp.CFrame
-                hrp.AssemblyLinearVelocity = flingForce
+                glove.CFrame = targetHrp.CFrame
+                glove.AssemblyLinearVelocity = knockbackVector
+            else
+                break
             end
             RunService.Heartbeat:Wait()
         end
 
-        -- Clean up angular velocity force
-        bav:Destroy()
-
-        -- Reset local velocities immediately
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-
-        -- Return local player safely to original position
-        hrp.CFrame = oldCF
-        
-        -- Heartbeat sync to stabilize physics without anchoring
-        RunService.Heartbeat:Wait()
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        hrp.CFrame = oldCF
-
-        -- Restore original body part collisions
-        for part, canCollideState in pairs(savedCollisions) do
-            if part and part.Parent then
-                part.CanCollide = canCollideState
-            end
-        end
+        -- Clean up Glove
+        pcall(function() glove:Destroy() end)
     end
 
     task.wait(0.15)
