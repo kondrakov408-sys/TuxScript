@@ -733,18 +733,18 @@ local function performSuperPunch()
         end
     end
 
-    -- 3. Execute Smart Multi-Attempt Dynamic Fling Engine
+    -- 3. Execute High-Power Physics Fling (Guaranteed Launch for Moving Targets)
     if targetCharacter and targetPart and targetCharacter.Parent then
         local homeCF = hrp.CFrame
 
-        -- Save & Protect Humanoid Health / Dead States so LocalPlayer cannot die
+        -- Save & Protect Humanoid states so LocalPlayer doesn't get fling-killed or trip
         local origDeadState = humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead)
         local origFallingState = humanoid:GetStateEnabled(Enum.HumanoidStateType.FallingDown)
 
         humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
         humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
 
-        -- Disable local limb collisions to protect Motor6Ds
+        -- Temporarily disable CanCollide on local limbs except HRP to prevent self-collision physics glitch
         local savedCollisions = {}
         for _, part in pairs(char:GetChildren()) do
             if part:IsA("BasePart") then
@@ -755,7 +755,7 @@ local function performSuperPunch()
             end
         end
 
-        -- Active Health Lock Connection during contact
+        -- Active Health Guard Connection during contact phase
         local startHealth = humanoid.Health
         local healthLock = registerConn(RunService.Heartbeat:Connect(function()
             if humanoid and humanoid.Parent then
@@ -765,109 +765,76 @@ local function performSuperPunch()
             end
         end))
 
-        local maxAttempts = 3
-        local flingSuccess = false
+        -- Ultra-High Spin & Velocity Objects
+        local bav = Instance.new("BodyAngularVelocity")
+        bav.Name = "TuxPunchSpin"
+        bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bav.AngularVelocity = Vector3.new(9999999, 9999999, 9999999)
+        bav.Parent = hrp
 
-        for attempt = 1, maxAttempts do
+        local bvl = Instance.new("BodyVelocity")
+        bvl.Name = "TuxPunchVel"
+        bvl.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bvl.Velocity = Vector3.new(9999999, 9999999, 9999999)
+        bvl.Parent = hrp
+
+        -- High-frequency contact loop (Runs on Heartbeat for instant Roblox physics sync)
+        local duration = 0.5
+        local startTime = tick()
+
+        while tick() - startTime < duration do
             if not targetCharacter or not targetCharacter.Parent or not targetPart or not targetPart.Parent then
                 break
             end
 
-            -- High Velocity Spin Forces (Linear + Angular)
-            local bav = Instance.new("BodyAngularVelocity")
-            bav.Name = "TuxPunchFlingSpin"
-            bav.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-            bav.AngularVelocity = Vector3.new(2000000, 2000000, 2000000)
-            bav.Parent = hrp
-
-            local bvl = Instance.new("BodyVelocity")
-            bvl.Name = "TuxPunchFlingVel"
-            bvl.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            bvl.Velocity = Vector3.new(2000000, 2000000, 2000000)
-            bvl.Parent = hrp
-
-            local attemptWindow = 0.55
-            local startTime = tick()
-            local lastPos = targetPart.Position
-
-            while tick() - startTime < attemptWindow do
-                if targetCharacter and targetCharacter.Parent and targetPart and targetPart.Parent then
-                    local currentPos = targetPart.Position
-                    local measuredVel = (currentPos - lastPos) / math.max(RunService.Heartbeat:Wait(), 0.001)
-                    lastPos = currentPos
-
-                    local tSpeed = measuredVel.Magnitude
-
-                    -- Target Detachment check: stop if target launched into atmosphere
-                    if tSpeed > 300 then
-                        flingSuccess = true
-                        break
+            -- Ensure target limbs have active collision so physics impulse connects
+            pcall(function()
+                for _, p in pairs(targetCharacter:GetChildren()) do
+                    if p:IsA("BasePart") then
+                        p.CanCollide = true
+                        p.CanTouch = true
                     end
-
-                    -- Ensure contact collision on target parts
-                    pcall(function()
-                        for _, p in pairs(targetCharacter:GetChildren()) do
-                            if p:IsA("BasePart") then
-                                p.CanCollide = true
-                                p.CanTouch = true
-                            end
-                        end
-                    end)
-
-                    -- Kinematic Prediction: Calculate exact position based on target velocity vector
-                    local predictedPos = currentPos + measuredVel * 0.12
-
-                    -- High Velocity Rotational Contact Position
-                    local randAngle = CFrame.Angles(
-                        math.rad(math.random(-360, 360)),
-                        math.rad(math.random(-360, 360)),
-                        math.rad(math.random(-360, 360))
-                    )
-
-                    hrp.AssemblyAngularVelocity = Vector3.new(2000000, 2000000, 2000000)
-                    hrp.AssemblyLinearVelocity = Vector3.new(2000000, 2000000, 2000000)
-                    hrp.CFrame = CFrame.new(predictedPos) * randAngle
-
-                    -- Force physical reaction on target part directly if network ownership permits
-                    pcall(function()
-                        targetPart.AssemblyLinearVelocity = (measuredVel + Vector3.new(math.random(-500, 500), 1000, math.random(-500, 500))) * 15
-                        targetPart.AssemblyAngularVelocity = Vector3.new(2000000, 2000000, 2000000)
-                    end)
-                else
-                    break
                 end
-            end
+            end)
 
-            -- Clean up spin/velocity forces for this attempt
-            bav:Destroy()
-            bvl:Destroy()
+            -- Absolute Target Lock & Prediction Offset
+            local tPos = targetPart.Position
+            local tVel = targetPart.AssemblyLinearVelocity
+            local predictedTargetPos = tPos + (tVel * 0.05)
 
-            -- Reset position safely between attempts
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-            hrp.CFrame = homeCF
+            -- Alternating Extreme Angular Forces & Position Stutter (Forces Roblox Physics Engine to trigger Fling)
+            local offset = Vector3.new(math.random(-2, 2), math.random(-1, 2), math.random(-2, 2))
+            local randRot = CFrame.Angles(
+                math.rad(math.random(-360, 360)),
+                math.rad(math.random(-360, 360)),
+                math.rad(math.random(-360, 360))
+            )
 
-            hrp.Anchored = true
-            RunService.Heartbeat:Wait()
-            hrp.Anchored = false
+            hrp.CFrame = CFrame.new(predictedTargetPos + offset) * randRot
+            hrp.AssemblyAngularVelocity = Vector3.new(9999999, 9999999, 9999999)
+            hrp.AssemblyLinearVelocity = Vector3.new(9999999, 9999999, 9999999)
 
-            if flingSuccess or (targetPart and targetPart.Parent and targetPart.AssemblyLinearVelocity.Magnitude > 150) then
-                flingSuccess = true
+            -- Stop early if target speed exploded (Target successfully flung!)
+            if tVel.Magnitude > 120 then
                 break
             end
 
-            task.wait(0.02)
+            RunService.Heartbeat:Wait()
         end
 
-        -- Final Recovery & Cleanup
+        -- Clean up body forces
+        bav:Destroy()
+        bvl:Destroy()
+
+        -- Safe Return Home & Instant Velocity Reset
         healthLock:Disconnect()
 
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
         hrp.CFrame = homeCF
 
+        -- Double Anchor Blink to guarantee zero leftover momentum
         hrp.Anchored = true
-        RunService.Heartbeat:Wait()
         RunService.Heartbeat:Wait()
         hrp.Anchored = false
 
@@ -875,7 +842,7 @@ local function performSuperPunch()
         hrp.AssemblyAngularVelocity = Vector3.zero
         hrp.CFrame = homeCF
 
-        -- Restore original collisions
+        -- Restore original collision states
         for part, canCollideState in pairs(savedCollisions) do
             if part and part.Parent then
                 part.CanCollide = canCollideState
@@ -883,7 +850,7 @@ local function performSuperPunch()
         end
 
         -- Restore Humanoid states
-        task.delay(1.0, function()
+        task.delay(0.5, function()
             if humanoid and humanoid.Parent then
                 humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, origDeadState)
                 humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, origFallingState)
@@ -891,7 +858,7 @@ local function performSuperPunch()
         end)
     end
 
-    task.wait(0.15)
+    task.wait(0.1)
     isPunching = false
 end
 
