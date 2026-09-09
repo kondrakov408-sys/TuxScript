@@ -421,35 +421,32 @@ local function createCategoryColumn(title, icon, layoutOrder)
     cHeader.Size = UDim2.new(1, 0, 0, 34)
     cHeader.Position = UDim2.new(0, 0, 0, 0)
     cHeader.BackgroundColor3 = currentTheme.Header
-    cHeader.Text = icon .. "  " .. title
+    cHeader.Text = "  " .. icon .. "  " .. title
     cHeader.TextColor3 = currentTheme.Accent
-    cHeader.TextSize = 13
+    cHeader.TextSize = 12
     cHeader.Font = Enum.Font.GothamBold
+    cHeader.TextXAlignment = Enum.TextXAlignment.Left
     cHeader.Parent = col
 
     local cHeaderCorner = Instance.new("UICorner")
     cHeaderCorner.CornerRadius = UDim.new(0, 10)
     cHeaderCorner.Parent = cHeader
 
-    -- Scroll Area for Features inside Column (Full PC MouseWheel + Mobile Touch Support)
+    -- Scroll Area for Features inside Column (Accommodates dedicated Touch Thumb on right)
     local cScroll = Instance.new("ScrollingFrame")
     cScroll.Name = title .. "Scroll"
-    cScroll.Size = UDim2.new(1, -6, 1, -38)
+    cScroll.Size = UDim2.new(1, -26, 1, -38)
     cScroll.Position = UDim2.new(0, 3, 0, 36)
     cScroll.BackgroundTransparency = 1
     cScroll.BorderSizePixel = 0
-    cScroll.ScrollBarThickness = 7
-    cScroll.ScrollBarImageColor3 = currentTheme.Accent
-    cScroll.ScrollBarImageTransparency = 0
+    cScroll.ScrollBarThickness = 0 -- Dedicated touch-draggable "ползунок" handles scrolling
     cScroll.ScrollingDirection = Enum.ScrollingDirection.Y
-    cScroll.VerticalScrollBarPosition = Enum.VerticalScrollBarPosition.Right
-    cScroll.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
     cScroll.Active = true
     cScroll.Selectable = true
     cScroll.ScrollingEnabled = true
     cScroll.ClipsDescendants = true
     cScroll.ElasticBehavior = Enum.ElasticBehavior.Always
-    cScroll.CanvasSize = UDim2.new(0, 0, 0, 600) -- Instant safe Canvas size so scrollbar is drawn immediately
+    cScroll.CanvasSize = UDim2.new(0, 0, 0, 650)
     cScroll.Parent = col
 
     local cLayout = Instance.new("UIListLayout")
@@ -458,12 +455,187 @@ local function createCategoryColumn(title, icon, layoutOrder)
     cLayout.Padding = UDim.new(0, 6)
     cLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
+    -- =========================================================
+    -- MOBILE TOUCH SCROLLBAR ("СПЕЦ ПОЛЗУНОК") 📱
+    -- Tactile, visible, wide draggable handle designed specifically for phone screens!
+    -- =========================================================
+    local scrollTrack = Instance.new("Frame")
+    scrollTrack.Name = "TouchScrollTrack"
+    scrollTrack.Size = UDim2.new(0, 20, 1, -44)
+    scrollTrack.Position = UDim2.new(1, -23, 0, 38)
+    scrollTrack.BackgroundColor3 = Color3.fromRGB(24, 24, 38)
+    scrollTrack.BorderSizePixel = 0
+    scrollTrack.Parent = col
+
+    local trackCorner = Instance.new("UICorner")
+    trackCorner.CornerRadius = UDim.new(0, 6)
+    trackCorner.Parent = scrollTrack
+
+    local trackStroke = Instance.new("UIStroke")
+    trackStroke.Color = Color3.fromRGB(55, 55, 78)
+    trackStroke.Thickness = 1.2
+    trackStroke.Parent = scrollTrack
+
+    local scrollThumb = Instance.new("TextButton")
+    scrollThumb.Name = "TouchScrollThumb"
+    scrollThumb.Size = UDim2.new(1, 0, 0, 48)
+    scrollThumb.Position = UDim2.new(0, 0, 0, 0)
+    scrollThumb.BackgroundColor3 = currentTheme.Accent
+    scrollThumb.Text = "≡"
+    scrollThumb.TextColor3 = Color3.fromRGB(18, 18, 28)
+    scrollThumb.TextSize = 13
+    scrollThumb.Font = Enum.Font.GothamBold
+    scrollThumb.AutoButtonColor = false
+    scrollThumb.Parent = scrollTrack
+
+    local thumbCorner = Instance.new("UICorner")
+    thumbCorner.CornerRadius = UDim.new(0, 6)
+    thumbCorner.Parent = scrollThumb
+
+    local thumbStroke = Instance.new("UIStroke")
+    thumbStroke.Color = Color3.fromRGB(255, 255, 255)
+    thumbStroke.Thickness = 1
+    thumbStroke.Transparency = 0.4
+    thumbStroke.Parent = scrollThumb
+
+    local isThumbDragging = false
+    local thumbTouchStartY = 0
+    local thumbStartOffset = 0
+
+    local function applyThumbDrag(inputY)
+        local deltaY = inputY - thumbTouchStartY
+        local maxThumbY = math.max(1, scrollTrack.AbsoluteSize.Y - scrollThumb.AbsoluteSize.Y)
+        local targetThumbY = math.clamp(thumbStartOffset + deltaY, 0, maxThumbY)
+        scrollThumb.Position = UDim2.new(0, 0, 0, targetThumbY)
+
+        local ratio = targetThumbY / maxThumbY
+        local maxCanvasScroll = math.max(0, cScroll.CanvasSize.Y.Offset - cScroll.AbsoluteWindowSize.Y)
+        cScroll.CanvasPosition = Vector2.new(0, ratio * maxCanvasScroll)
+    end
+
+    scrollThumb.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isThumbDragging = true
+            thumbTouchStartY = input.Position.Y
+            thumbStartOffset = scrollThumb.Position.Y.Offset
+        end
+    end)
+
+    scrollTrack.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isThumbDragging = true
+            local clickRelY = input.Position.Y - scrollTrack.AbsolutePosition.Y
+            local maxThumbY = math.max(1, scrollTrack.AbsoluteSize.Y - scrollThumb.AbsoluteSize.Y)
+            local targetThumbY = math.clamp(clickRelY - (scrollThumb.AbsoluteSize.Y / 2), 0, maxThumbY)
+            scrollThumb.Position = UDim2.new(0, 0, 0, targetThumbY)
+            thumbTouchStartY = input.Position.Y
+            thumbStartOffset = targetThumbY
+
+            local ratio = targetThumbY / maxThumbY
+            local maxCanvasScroll = math.max(0, cScroll.CanvasSize.Y.Offset - cScroll.AbsoluteWindowSize.Y)
+            cScroll.CanvasPosition = Vector2.new(0, ratio * maxCanvasScroll)
+        end
+    end)
+
+    registerConn(UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isThumbDragging = false
+        end
+    end))
+
+    registerConn(UserInputService.InputChanged:Connect(function(input)
+        if isThumbDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            applyThumbDrag(input.Position.Y)
+        end
+    end))
+
+    cScroll:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+        if not isThumbDragging then
+            local maxCanvasScroll = math.max(1, cScroll.CanvasSize.Y.Offset - cScroll.AbsoluteWindowSize.Y)
+            local ratio = math.clamp(cScroll.CanvasPosition.Y / maxCanvasScroll, 0, 1)
+            local maxThumbY = math.max(1, scrollTrack.AbsoluteSize.Y - scrollThumb.AbsoluteSize.Y)
+            scrollThumb.Position = UDim2.new(0, 0, 0, ratio * maxThumbY)
+        end
+    end)
+
+    -- =========================================================
+    -- TAP-TO-SCROLL ARROWS IN HEADER (1-Tap Convenience) 🔼🔽
+    -- =========================================================
+    local downBtn = Instance.new("TextButton")
+    downBtn.Name = "ScrollDownBtn"
+    downBtn.Size = UDim2.new(0, 24, 0, 24)
+    downBtn.Position = UDim2.new(1, -26, 0.5, -12)
+    downBtn.BackgroundColor3 = Color3.fromRGB(44, 44, 62)
+    downBtn.Text = "▼"
+    downBtn.TextColor3 = currentTheme.Accent
+    downBtn.TextSize = 11
+    downBtn.Font = Enum.Font.GothamBold
+    downBtn.Parent = cHeader
+
+    local downCorner = Instance.new("UICorner")
+    downCorner.CornerRadius = UDim.new(0, 5)
+    downCorner.Parent = downBtn
+
+    downBtn.MouseButton1Click:Connect(function()
+        local maxCanvasScroll = math.max(0, cScroll.CanvasSize.Y.Offset - cScroll.AbsoluteWindowSize.Y)
+        cScroll.CanvasPosition = Vector2.new(0, math.clamp(cScroll.CanvasPosition.Y + 80, 0, maxCanvasScroll))
+    end)
+
+    local upBtn = Instance.new("TextButton")
+    upBtn.Name = "ScrollUpBtn"
+    upBtn.Size = UDim2.new(0, 24, 0, 24)
+    upBtn.Position = UDim2.new(1, -54, 0.5, -12)
+    upBtn.BackgroundColor3 = Color3.fromRGB(44, 44, 62)
+    upBtn.Text = "▲"
+    upBtn.TextColor3 = currentTheme.Accent
+    upBtn.TextSize = 11
+    upBtn.Font = Enum.Font.GothamBold
+    upBtn.Parent = cHeader
+
+    local upCorner = Instance.new("UICorner")
+    upCorner.CornerRadius = UDim.new(0, 5)
+    upCorner.Parent = upBtn
+
+    upBtn.MouseButton1Click:Connect(function()
+        local maxCanvasScroll = math.max(0, cScroll.CanvasSize.Y.Offset - cScroll.AbsoluteWindowSize.Y)
+        cScroll.CanvasPosition = Vector2.new(0, math.clamp(cScroll.CanvasPosition.Y - 80, 0, maxCanvasScroll))
+    end)
+
+    -- Full Touch Swipe Detection Over Column
+    local touchSwipeStart = 0
+    local touchSwipeOriginCanvas = 0
+    local isSwiping = false
+
+    local function onTouchSwipeStart(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            touchSwipeStart = input.Position.Y
+            touchSwipeOriginCanvas = cScroll.CanvasPosition.Y
+            isSwiping = true
+        end
+    end
+
+    cScroll.InputBegan:Connect(onTouchSwipeStart)
+    col.InputBegan:Connect(onTouchSwipeStart)
+
+    registerConn(UserInputService.InputChanged:Connect(function(input)
+        if isSwiping and input.UserInputType == Enum.UserInputType.Touch then
+            local deltaY = input.Position.Y - touchSwipeStart
+            local maxCanvasScroll = math.max(0, cScroll.CanvasSize.Y.Offset - cScroll.AbsoluteWindowSize.Y)
+            cScroll.CanvasPosition = Vector2.new(0, math.clamp(touchSwipeOriginCanvas - deltaY, 0, maxCanvasScroll))
+        end
+    end))
+
+    registerConn(UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            isSwiping = false
+        end
+    end))
+
     cLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() refreshScroll(cScroll) end)
     cScroll.ChildAdded:Connect(function() task.defer(function() refreshScroll(cScroll) end) end)
     cScroll.ChildRemoved:Connect(function() task.defer(function() refreshScroll(cScroll) end) end)
     cScroll:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(function() refreshScroll(cScroll) end)
 
-    -- Direct scroll on column background and header
     forwardMouseWheel(cScroll, cScroll)
     forwardMouseWheel(cHeader, cScroll)
     forwardMouseWheel(col, cScroll)
@@ -483,22 +655,26 @@ local designScroll  = createCategoryColumn("Design", "🎨", 5)
 -- UI MODULE BUILDERS (Toggles, Sliders, Dropdowns)
 ---------------------------------------------------------
 
--- Create Module Toggle Button
-local function addModuleToggle(parentScroll, name, defaultState, callback)
+-- Create Module Toggle Button (supports customLayoutOrder)
+local function addModuleToggle(parentScroll, name, defaultState, callback, customLayoutOrder)
     local btn = Instance.new("TextButton")
     btn.Name = name .. "Toggle"
-    btn.Size = UDim2.new(0.92, 0, 0, 34)
+    btn.Size = UDim2.new(0.96, 0, 0, 34)
     btn.BackgroundColor3 = defaultState and currentTheme.Active or Color3.fromRGB(38, 38, 55)
     btn.Text = name
     btn.TextColor3 = defaultState and Color3.fromRGB(17, 17, 27) or currentTheme.Text
     btn.Font = Enum.Font.GothamMedium
     btn.TextSize = 11
 
-    local count = 0
-    for _, c in ipairs(parentScroll:GetChildren()) do
-        if c:IsA("GuiObject") then count = count + 1 end
+    if customLayoutOrder then
+        btn.LayoutOrder = customLayoutOrder
+    else
+        local count = 0
+        for _, c in ipairs(parentScroll:GetChildren()) do
+            if c:IsA("GuiObject") then count = count + 1 end
+        end
+        btn.LayoutOrder = count + 10
     end
-    btn.LayoutOrder = count + 1
     btn.Parent = parentScroll
 
     local corner = Instance.new("UICorner")
@@ -509,7 +685,34 @@ local function addModuleToggle(parentScroll, name, defaultState, callback)
     forwardMouseWheel(btn, parentScroll)
 
     local state = defaultState
+    local touchMoved = false
+    local touchStartY = 0
+    local touchStartCanvasY = 0
+
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            touchMoved = false
+            touchStartY = input.Position.Y
+            touchStartCanvasY = parentScroll.CanvasPosition.Y
+        end
+    end)
+
+    btn.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            local deltaY = input.Position.Y - touchStartY
+            if math.abs(deltaY) > 8 then
+                touchMoved = true
+                local maxCanvasScroll = math.max(0, parentScroll.CanvasSize.Y.Offset - parentScroll.AbsoluteWindowSize.Y)
+                parentScroll.CanvasPosition = Vector2.new(0, math.clamp(touchStartCanvasY - deltaY, 0, maxCanvasScroll))
+            end
+        end
+    end)
+
     btn.MouseButton1Click:Connect(function()
+        if touchMoved then
+            touchMoved = false
+            return
+        end
         state = not state
         local targetColor = state and currentTheme.Active or Color3.fromRGB(38, 38, 55)
         local targetTextColor = state and Color3.fromRGB(17, 17, 27) or currentTheme.Text
@@ -522,18 +725,22 @@ local function addModuleToggle(parentScroll, name, defaultState, callback)
     return btn
 end
 
--- Create Module Slider
-local function addModuleSlider(parentScroll, name, min, max, defaultVal, callback)
+-- Create Module Slider (supports customLayoutOrder)
+local function addModuleSlider(parentScroll, name, min, max, defaultVal, callback, customLayoutOrder)
     local frame = Instance.new("Frame")
     frame.Name = name .. "Slider"
-    frame.Size = UDim2.new(0.92, 0, 0, 46)
+    frame.Size = UDim2.new(0.96, 0, 0, 46)
     frame.BackgroundColor3 = Color3.fromRGB(32, 32, 48)
 
-    local count = 0
-    for _, c in ipairs(parentScroll:GetChildren()) do
-        if c:IsA("GuiObject") then count = count + 1 end
+    if customLayoutOrder then
+        frame.LayoutOrder = customLayoutOrder
+    else
+        local count = 0
+        for _, c in ipairs(parentScroll:GetChildren()) do
+            if c:IsA("GuiObject") then count = count + 1 end
+        end
+        frame.LayoutOrder = count + 10
     end
-    frame.LayoutOrder = count + 1
     frame.Parent = parentScroll
 
     local corner = Instance.new("UICorner")
@@ -602,6 +809,26 @@ local function addModuleSlider(parentScroll, name, min, max, defaultVal, callbac
             updateSlider(input)
         end
     end))
+
+    -- Mobile touch vertical swipe scroll across slider frame
+    local fTouchStartY = 0
+    local fTouchStartCanvasY = 0
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch then
+            fTouchStartY = input.Position.Y
+            fTouchStartCanvasY = parentScroll.CanvasPosition.Y
+        end
+    end)
+
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch and not sDragging then
+            local deltaY = input.Position.Y - fTouchStartY
+            if math.abs(deltaY) > 8 then
+                local maxCanvasScroll = math.max(0, parentScroll.CanvasSize.Y.Offset - parentScroll.AbsoluteWindowSize.Y)
+                parentScroll.CanvasPosition = Vector2.new(0, math.clamp(fTouchStartCanvasY - deltaY, 0, maxCanvasScroll))
+            end
+        end
+    end)
 
     refreshScroll(parentScroll)
     return frame
@@ -1240,7 +1467,7 @@ end))
 -- Click Teleport
 addModuleToggle(funScroll, "Click Teleport 📍", false, function(enabled)
     State.ClickTP = enabled
-end)
+end, 4)
 
 registerConn(UserInputService.InputBegan:Connect(function(input, gpe)
     if not gpe and State.ClickTP and input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -1764,7 +1991,7 @@ addModuleToggle(funScroll, "Tux Companion Pet 🐧", false, function(enabled)
     else
         cleanupTuxPet()
     end
-end)
+end, 3)
 
 -- =========================================================
 -- EMPEROR TUX RIDE MOUNT 🐧👑
@@ -2356,16 +2583,16 @@ addModuleToggle(funScroll, "Tux Ride 👑", false, function(enabled)
     else
         cleanupTuxRide()
     end
-end)
+end, 1)
 
 addModuleSlider(funScroll, "Ride Speed", 30, 150, 70, function(val)
     State.RideSpeed = val
-end)
+end, 2)
 
 -- Gravity Modifier
 addModuleSlider(funScroll, "Gravity", 0, 196, 196, function(val)
     Workspace.Gravity = val
-end)
+end, 5)
 
 -- Chat Spammer
 local spamConn
@@ -2381,7 +2608,7 @@ addModuleToggle(funScroll, "Tux Chat Spammer 💬", false, function(enabled)
             end
         end)
     end
-end)
+end, 6)
 
 -- ==================== VISUALS CATEGORY ====================
 
