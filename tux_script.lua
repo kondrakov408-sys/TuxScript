@@ -1481,6 +1481,7 @@ local rideClickConns = {}
 local rideCharAddedConn = nil
 local rideSeat = nil
 local isRiderMounted = false
+local rideActionBtn = nil
 
 local function cleanupTuxRide()
     if rideLoopConn then
@@ -1491,6 +1492,11 @@ local function cleanupTuxRide()
         pcall(function() c:Disconnect() end)
     end
     rideClickConns = {}
+
+    if rideActionBtn then
+        pcall(function() rideActionBtn:Destroy() end)
+        rideActionBtn = nil
+    end
 
     -- Safely unseat player and restore limbs
     if isRiderMounted and LocalPlayer.Character then
@@ -1521,7 +1527,7 @@ local function spawnEmperorTuxRide()
     local playerHrp = char:FindFirstChild("HumanoidRootPart")
     if not playerHrp then return end
 
-    -- Container model parented directly to Workspace (guarantees zero replication lag & full client rendering)
+    -- Container model parented directly to Workspace
     rideModel = Instance.new("Model")
     rideModel.Name = "EmperorTuxRide"
     rideModel.Parent = Workspace
@@ -1530,7 +1536,7 @@ local function spawnEmperorTuxRide()
     -- Invisible root
     local root = Instance.new("Part")
     root.Name = "RideRoot"
-    root.Size = Vector3.new(3.2, 4.8, 3.6)
+    root.Size = Vector3.new(2.8, 4.2, 2.8)
     root.Transparency = 1
     root.CanCollide = false
     root.CanTouch = false
@@ -1541,7 +1547,7 @@ local function spawnEmperorTuxRide()
     root.Parent = rideModel
     rideModel.PrimaryPart = root
 
-    -- Helper to create visual anchored parts
+    -- Helper to create guaranteed interactive visual parts
     local function makePart(name, size, color, meshType, meshScale, material)
         local p = Instance.new("Part")
         p.Name = name
@@ -1549,8 +1555,8 @@ local function spawnEmperorTuxRide()
         p.Color = color
         p.Material = material or Enum.Material.SmoothPlastic
         p.CanCollide = false
-        p.CanTouch = false
-        p.CanQuery = false
+        p.CanTouch = true
+        p.CanQuery = true
         p.Massless = true
         p.Anchored = true
         p.CastShadow = false
@@ -1570,80 +1576,83 @@ local function spawnEmperorTuxRide()
     end
 
     -- Emperor Penguin Color Palette
-    local colBlack = Color3.fromRGB(18, 20, 28)
-    local colWhite = Color3.fromRGB(248, 250, 255)
-    local colGold = Color3.fromRGB(255, 175, 45)
-    local colYellow = Color3.fromRGB(255, 215, 80)
-    local colBeak = Color3.fromRGB(25, 25, 30)
-    local colBeakStripe = Color3.fromRGB(255, 120, 110)
+    local colBlack = Color3.fromRGB(24, 26, 36)
+    local colWhite = Color3.fromRGB(255, 255, 255)
+    local colGold = Color3.fromRGB(255, 145, 25)
+    local colYellow = Color3.fromRGB(255, 210, 50)
+    local colBeak = Color3.fromRGB(255, 125, 25)
+    local colBeakStripe = Color3.fromRGB(240, 75, 65)
     local colEyePupil = Color3.fromRGB(15, 15, 20)
-    local colFeet = Color3.fromRGB(240, 140, 30)
-    local colLeather = Color3.fromRGB(58, 38, 28)
-    local colStirrup = Color3.fromRGB(235, 185, 55)
-    local colReins = Color3.fromRGB(45, 28, 18)
+    local colFeet = Color3.fromRGB(255, 130, 20)
+    local colLeather = Color3.fromRGB(120, 65, 35)
+    local colStirrup = Color3.fromRGB(255, 215, 60)
+    local colReins = Color3.fromRGB(60, 35, 20)
 
-    -- 1. Majestic Emperor Body
-    local bodyPart = makePart("Body", Vector3.new(3.2, 3.8, 2.8), colBlack, Enum.MeshType.Sphere)
+    -- 1. Upright Emperor Body (Torso)
+    local bodyPart = makePart("Body", Vector3.new(2.6, 3.4, 2.2), colBlack, Enum.MeshType.Sphere)
 
-    -- 2. Silky White Breast Plate
-    local bellyPart = makePart("Belly", Vector3.new(2.4, 3.0, 1.2), colWhite, Enum.MeshType.Sphere)
+    -- 2. Crisp White Belly (Clearly protruding on the front!)
+    local bellyPart = makePart("Belly", Vector3.new(2.0, 2.8, 1.2), colWhite, Enum.MeshType.Sphere)
 
-    -- 3. Golden Throat & Upper Chest Fade
-    local chestGoldPart = makePart("ChestGold", Vector3.new(1.9, 1.3, 0.75), colYellow, Enum.MeshType.Sphere)
+    -- 3. Golden-Yellow Throat Bib (Directly above belly)
+    local chestGoldPart = makePart("ChestGold", Vector3.new(1.7, 1.2, 0.9), colYellow, Enum.MeshType.Sphere)
 
     -- 4. Emperor Head
-    local headPart = makePart("Head", Vector3.new(2.4, 2.2, 2.3), colBlack, Enum.MeshType.Sphere)
+    local headPart = makePart("Head", Vector3.new(1.9, 1.7, 1.9), colBlack, Enum.MeshType.Sphere)
 
-    -- 5. Vibrant Auricular Patches (Left & Right Golden Neck Feathers)
-    local neckGoldLeft = makePart("NeckGoldLeft", Vector3.new(0.65, 1.2, 0.65), colGold, Enum.MeshType.Sphere)
-    local neckGoldRight = makePart("NeckGoldRight", Vector3.new(0.65, 1.2, 0.65), colGold, Enum.MeshType.Sphere)
+    -- 5. Radiant Auricular Patches (Left & Right Golden Neck Feathers)
+    local neckGoldLeft = makePart("NeckGoldLeft", Vector3.new(0.5, 0.85, 0.6), colGold, Enum.MeshType.Sphere)
+    local neckGoldRight = makePart("NeckGoldRight", Vector3.new(0.5, 0.85, 0.6), colGold, Enum.MeshType.Sphere)
 
-    -- 6. Emperor Beak & Coral Mandibular Stripe
-    local beakPart = makePart("Beak", Vector3.new(0.72, 0.48, 1.45), colBeak, Enum.MeshType.Wedge)
-    local beakStripePart = makePart("BeakStripe", Vector3.new(0.76, 0.16, 0.95), colBeakStripe, Enum.MeshType.Brick)
+    -- 6. Royal Golden Crown 👑
+    local crownPart = makePart("Crown", Vector3.new(0.85, 0.45, 0.85), Color3.fromRGB(255, 220, 30), Enum.MeshType.Cylinder, nil, Enum.Material.Neon)
 
-    -- 7. Expressive Emperor Eyes
-    local leftEyeWhite = makePart("LeftEyeWhite", Vector3.new(0.42, 0.48, 0.2), colWhite, Enum.MeshType.Sphere)
-    local leftEyePupil = makePart("LeftEyePupil", Vector3.new(0.22, 0.28, 0.14), colEyePupil, Enum.MeshType.Sphere)
-    local rightEyeWhite = makePart("RightEyeWhite", Vector3.new(0.42, 0.48, 0.2), colWhite, Enum.MeshType.Sphere)
-    local rightEyePupil = makePart("RightEyePupil", Vector3.new(0.22, 0.28, 0.14), colEyePupil, Enum.MeshType.Sphere)
+    -- 7. Emperor Beak & Coral Mandibular Stripe
+    local beakPart = makePart("Beak", Vector3.new(0.5, 0.35, 1.2), colBeak, Enum.MeshType.Wedge)
+    local beakStripePart = makePart("BeakStripe", Vector3.new(0.52, 0.15, 0.8), colBeakStripe, Enum.MeshType.Brick)
 
-    -- 8. Elongated Hydrodynamic Flippers
-    local leftFlipper = makePart("LeftFlipper", Vector3.new(0.55, 2.3, 1.1), colBlack, Enum.MeshType.Sphere)
-    local rightFlipper = makePart("RightFlipper", Vector3.new(0.55, 2.3, 1.1), colBlack, Enum.MeshType.Sphere)
+    -- 8. Expressive Eyes (Left & Right)
+    local leftEyeWhite = makePart("LeftEyeWhite", Vector3.new(0.38, 0.42, 0.15), colWhite, Enum.MeshType.Sphere)
+    local leftEyePupil = makePart("LeftEyePupil", Vector3.new(0.2, 0.24, 0.1), colEyePupil, Enum.MeshType.Sphere)
+    local rightEyeWhite = makePart("RightEyeWhite", Vector3.new(0.38, 0.42, 0.15), colWhite, Enum.MeshType.Sphere)
+    local rightEyePupil = makePart("RightEyePupil", Vector3.new(0.2, 0.24, 0.1), colEyePupil, Enum.MeshType.Sphere)
 
-    -- 9. Webbed Emperor Feet
-    local leftFoot = makePart("LeftFoot", Vector3.new(1.0, 0.38, 1.6), colFeet, Enum.MeshType.Sphere)
-    local rightFoot = makePart("RightFoot", Vector3.new(1.0, 0.38, 1.6), colFeet, Enum.MeshType.Sphere)
+    -- 9. Hydrodynamic Flippers
+    local leftFlipper = makePart("LeftFlipper", Vector3.new(0.45, 2.0, 0.9), colBlack, Enum.MeshType.Sphere)
+    local rightFlipper = makePart("RightFlipper", Vector3.new(0.45, 2.0, 0.9), colBlack, Enum.MeshType.Sphere)
 
-    -- 10. Rudder Tail
-    local tailPart = makePart("Tail", Vector3.new(0.85, 0.45, 0.85), colBlack, Enum.MeshType.Wedge)
+    -- 10. Webbed Feet
+    local leftFoot = makePart("LeftFoot", Vector3.new(0.85, 0.35, 1.4), colFeet, Enum.MeshType.Sphere)
+    local rightFoot = makePart("RightFoot", Vector3.new(0.85, 0.35, 1.4), colFeet, Enum.MeshType.Sphere)
 
-    -- 11. Tack & Saddle
-    local saddleBase = makePart("SaddleBase", Vector3.new(2.3, 0.35, 2.2), colLeather, Enum.MeshType.Brick, nil, Enum.Material.Leather)
-    local saddleCantle = makePart("SaddleCantle", Vector3.new(2.1, 0.7, 0.4), colLeather, Enum.MeshType.Brick, nil, Enum.Material.Leather)
-    local saddlePummel = makePart("SaddlePummel", Vector3.new(1.4, 0.55, 0.35), colLeather, Enum.MeshType.Brick, nil, Enum.Material.Leather)
-    local leftStirrup = makePart("LeftStirrup", Vector3.new(0.18, 1.3, 0.22), colStirrup, Enum.MeshType.Brick, nil, Enum.Material.Metal)
-    local rightStirrup = makePart("RightStirrup", Vector3.new(0.18, 1.3, 0.22), colStirrup, Enum.MeshType.Brick, nil, Enum.Material.Metal)
-    local reinLeft = makePart("ReinLeft", Vector3.new(0.12, 0.12, 1.9), colReins, Enum.MeshType.Brick, nil, Enum.Material.Leather)
-    local reinRight = makePart("ReinRight", Vector3.new(0.12, 0.12, 1.9), colReins, Enum.MeshType.Brick, nil, Enum.Material.Leather)
+    -- 11. Rudder Tail
+    local tailPart = makePart("Tail", Vector3.new(0.7, 0.4, 0.7), colBlack, Enum.MeshType.Wedge)
 
-    -- 12. Responsive VehicleSeat (Anchored, CFrame-driven for 100% control & anti-fling safety)
+    -- 12. Tack & Saddle (Clearly Resting On Top of Back at Y = 1.85!)
+    local saddleBase = makePart("SaddleBase", Vector3.new(2.4, 0.45, 2.2), colLeather, Enum.MeshType.Brick)
+    local saddleCantle = makePart("SaddleCantle", Vector3.new(2.1, 0.85, 0.4), colLeather, Enum.MeshType.Brick)
+    local saddlePummel = makePart("SaddlePummel", Vector3.new(1.5, 0.7, 0.35), colLeather, Enum.MeshType.Brick)
+    local leftStirrup = makePart("LeftStirrup", Vector3.new(0.18, 1.2, 0.22), colStirrup, Enum.MeshType.Brick)
+    local rightStirrup = makePart("RightStirrup", Vector3.new(0.18, 1.2, 0.22), colStirrup, Enum.MeshType.Brick)
+    local reinLeft = makePart("ReinLeft", Vector3.new(0.12, 0.12, 1.8), colReins, Enum.MeshType.Brick)
+    local reinRight = makePart("ReinRight", Vector3.new(0.12, 0.12, 1.8), colReins, Enum.MeshType.Brick)
+
+    -- 13. VehicleSeat for Rider
     rideSeat = Instance.new("VehicleSeat")
     rideSeat.Name = "TuxRideSeat"
     rideSeat.Size = Vector3.new(2.2, 0.5, 2.2)
     rideSeat.Transparency = 1
     rideSeat.CanCollide = false
     rideSeat.CanTouch = true
-    rideSeat.CanQuery = false
+    rideSeat.CanQuery = true
     rideSeat.Massless = true
     rideSeat.Anchored = true
     rideSeat.MaxSpeed = 0
     rideSeat.HeadsUpDisplay = false
-    rideSeat.CFrame = root.CFrame * CFrame.new(0, 1.7, 0.2)
+    rideSeat.CFrame = root.CFrame * CFrame.new(0, 2.1, 0.15)
     rideSeat.Parent = rideModel
 
-    -- 13. High-Density Snow & Ice Particle Emitter (Belly-Slide Roostertail)
+    -- 14. Particle Emitter for Ice Sliding
     local slideEmitter = Instance.new("ParticleEmitter")
     slideEmitter.Name = "RideIceParticles"
     slideEmitter.Texture = "rbxasset://textures/particles/smoke_main.dds"
@@ -1666,13 +1675,13 @@ local function spawnEmperorTuxRide()
     slideEmitter.Enabled = false
     slideEmitter.Parent = bodyPart
 
-    -- 14. Overhead Status Badge
+    -- 15. Overhead Status Badge
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "RideBadge"
-    billboard.Size = UDim2.new(0, 180, 0, 48)
-    billboard.StudsOffset = Vector3.new(0, 3.4, 0)
+    billboard.Size = UDim2.new(0, 190, 0, 48)
+    billboard.StudsOffset = Vector3.new(0, 3.6, 0)
     billboard.AlwaysOnTop = true
-    billboard.MaxDistance = 65
+    billboard.MaxDistance = 75
     billboard.Adornee = bodyPart
     billboard.Parent = rideModel
 
@@ -1707,60 +1716,134 @@ local function spawnEmperorTuxRide()
     statusLbl.Position = UDim2.new(0, 0, 0.5, 0)
     statusLbl.BackgroundTransparency = 1
     statusLbl.Font = Enum.Font.Gotham
-    statusLbl.Text = "[E] Mount • Click to Ride"
+    statusLbl.Text = "Tap or [E] to Ride!"
     statusLbl.TextColor3 = Color3.fromRGB(190, 230, 255)
     statusLbl.TextSize = 10
     statusLbl.Parent = badgeFrame
 
-    -- 15. Mounting Interaction System (ProximityPrompt + ClickDetector)
-    local mountPrompt = Instance.new("ProximityPrompt")
-    mountPrompt.Name = "MountPrompt"
-    mountPrompt.ObjectText = "👑 Emperor Tux"
-    mountPrompt.ActionText = "Ride [E] / Tap"
-    mountPrompt.HoldDuration = 0
-    mountPrompt.MaxActivationDistance = 18
-    mountPrompt.RequiresLineOfSight = false
-    mountPrompt.Parent = saddleBase
-
-    local mountClick = Instance.new("ClickDetector")
-    mountClick.MaxActivationDistance = 24
-    mountClick.Parent = saddleBase
-
-    local function mountPlayer(player)
-        if player == LocalPlayer or not player then
-            local myChar = LocalPlayer.Character
-            local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
-            if myHum and not isRiderMounted and rideSeat then
-                rideSeat:Sit(myHum)
-            end
+    -- Helper functions for mount / dismount
+    local function updateFloatingBtn()
+        if not rideActionBtn then return end
+        if isRiderMounted then
+            rideActionBtn.Text = "🐾 DISMOUNT"
+            rideActionBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+        else
+            rideActionBtn.Text = "🏇 RIDE TUX"
+            rideActionBtn.BackgroundColor3 = Color3.fromRGB(30, 180, 80)
         end
     end
 
-    table.insert(rideClickConns, mountPrompt.Triggered:Connect(mountPlayer))
-    table.insert(rideClickConns, mountClick.MouseClick:Connect(mountPlayer))
-
-    -- Seat Occupancy Hook
-    table.insert(rideClickConns, rideSeat:GetPropertyChangedSignal("Occupant"):Connect(function()
-        local occ = rideSeat.Occupant
+    local function mountPlayer()
         local myChar = LocalPlayer.Character
         local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
-        if occ and myHum and occ == myHum then
-            isRiderMounted = true
-            mountPrompt.Enabled = false
-            statusLbl.Text = "🐾 Riding • Shift: Slide • Space: Dismount"
-            statusLbl.TextColor3 = Color3.fromRGB(180, 245, 180)
-            notify("Emperor Tux 👑", "Mounted! WASD to steer, Shift to Ice Slide, Space to dismount!", 3.5)
-        else
-            isRiderMounted = false
-            mountPrompt.Enabled = true
-            statusLbl.Text = "[E] Mount • Click to Ride"
-            statusLbl.TextColor3 = Color3.fromRGB(190, 230, 255)
-            if myChar then
-                for _, motor in ipairs(myChar:GetDescendants()) do
-                    if motor:IsA("Motor6D") then
-                        pcall(function() motor.Transform = CFrame.new() end)
-                    end
+        local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        if not myHum or not myHrp then return end
+
+        isRiderMounted = true
+        myHum.Sit = true
+        myHrp.CFrame = root.CFrame * CFrame.new(0, 2.1, 0.15)
+        myHrp.AssemblyLinearVelocity = Vector3.zero
+        if rideSeat then
+            pcall(function() rideSeat:Sit(myHum) end)
+        end
+        statusLbl.Text = "🐾 Riding • Joystick / WASD to Steer"
+        statusLbl.TextColor3 = Color3.fromRGB(180, 245, 180)
+        updateFloatingBtn()
+        notify("Emperor Tux 👑", "Mounted! Use Joystick / WASD to Ride!", 3)
+    end
+
+    local function dismountPlayer()
+        local myChar = LocalPlayer.Character
+        local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+        local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        isRiderMounted = false
+        if myHum then
+            pcall(function() myHum.Sit = false end)
+        end
+        if myHrp and root and root.Parent then
+            myHrp.CFrame = root.CFrame * CFrame.new(-3.5, 1.2, 0)
+            myHrp.AssemblyLinearVelocity = Vector3.zero
+        end
+        if myChar then
+            for _, motor in ipairs(myChar:GetDescendants()) do
+                if motor:IsA("Motor6D") then
+                    pcall(function() motor.Transform = CFrame.new() end)
                 end
+            end
+        end
+        statusLbl.Text = "Tap or [E] to Ride!"
+        statusLbl.TextColor3 = Color3.fromRGB(190, 230, 255)
+        updateFloatingBtn()
+    end
+
+    -- 16. Floating Mobile Screen Button: "🏇 RIDE TUX"
+    rideActionBtn = Instance.new("TextButton")
+    rideActionBtn.Name = "TuxRideActionBtn"
+    rideActionBtn.Size = UDim2.new(0, 115, 0, 46)
+    rideActionBtn.Position = UDim2.new(0.82, -58, 0.72, 0)
+    rideActionBtn.BackgroundColor3 = Color3.fromRGB(30, 180, 80)
+    rideActionBtn.Text = "🏇 RIDE TUX"
+    rideActionBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    rideActionBtn.Font = Enum.Font.GothamBold
+    rideActionBtn.TextSize = 13
+    rideActionBtn.ZIndex = 150
+    rideActionBtn.Parent = ScreenGui
+
+    local actCorner = Instance.new("UICorner")
+    actCorner.CornerRadius = UDim.new(0, 12)
+    actCorner.Parent = rideActionBtn
+
+    local actStroke = Instance.new("UIStroke")
+    actStroke.Color = Color3.fromRGB(255, 255, 255)
+    actStroke.Thickness = 1.5
+    actStroke.Parent = rideActionBtn
+
+    table.insert(rideClickConns, rideActionBtn.MouseButton1Click:Connect(function()
+        if isRiderMounted then
+            dismountPlayer()
+        else
+            mountPlayer()
+        end
+    end))
+
+    -- 17. ClickDetectors on ALL major parts (Body, Saddle, Head)
+    local clickBody = Instance.new("ClickDetector")
+    clickBody.MaxActivationDistance = 30
+    clickBody.Parent = bodyPart
+
+    local clickSaddle = Instance.new("ClickDetector")
+    clickSaddle.MaxActivationDistance = 30
+    clickSaddle.Parent = saddleBase
+
+    local clickHead = Instance.new("ClickDetector")
+    clickHead.MaxActivationDistance = 30
+    clickHead.Parent = headPart
+
+    local function onToggleMount()
+        if isRiderMounted then dismountPlayer() else mountPlayer() end
+    end
+    table.insert(rideClickConns, clickBody.MouseClick:Connect(onToggleMount))
+    table.insert(rideClickConns, clickSaddle.MouseClick:Connect(onToggleMount))
+    table.insert(rideClickConns, clickHead.MouseClick:Connect(onToggleMount))
+
+    -- 18. ProximityPrompt for [E] / Tap
+    local mountPrompt = Instance.new("ProximityPrompt")
+    mountPrompt.Name = "MountPrompt"
+    mountPrompt.ObjectText = "👑 Emperor Tux"
+    mountPrompt.ActionText = "Ride / Tap"
+    mountPrompt.HoldDuration = 0
+    mountPrompt.MaxActivationDistance = 20
+    mountPrompt.RequiresLineOfSight = false
+    mountPrompt.Parent = bodyPart
+    table.insert(rideClickConns, mountPrompt.Triggered:Connect(onToggleMount))
+
+    -- 19. Auto-Mount on Walk-Into
+    table.insert(rideClickConns, bodyPart.Touched:Connect(function(hit)
+        local myChar = LocalPlayer.Character
+        if hit and myChar and hit:IsDescendantOf(myChar) and not isRiderMounted then
+            local myHrp = myChar:FindFirstChild("HumanoidRootPart")
+            if myHrp and (myHrp.Position - root.Position).Magnitude < 4.0 then
+                mountPlayer()
             end
         end
     end))
@@ -1768,18 +1851,7 @@ local function spawnEmperorTuxRide()
     -- Dismount Hook via Space Key
     table.insert(rideClickConns, UserInputService.InputBegan:Connect(function(input, gpe)
         if isRiderMounted and input.KeyCode == Enum.KeyCode.Space and not gpe then
-            local myChar = LocalPlayer.Character
-            local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
-            if myHum then
-                myHum.Sit = false
-                task.defer(function()
-                    local myHrp = myChar:FindFirstChild("HumanoidRootPart")
-                    if myHrp and root and root.Parent then
-                        myHrp.CFrame = root.CFrame * CFrame.new(-3.6, 1.2, 0)
-                        myHrp.AssemblyLinearVelocity = Vector3.zero
-                    end
-                end)
-            end
+            dismountPlayer()
         end
     end))
 
@@ -1794,7 +1866,7 @@ local function spawnEmperorTuxRide()
         local rayDir = Vector3.new(0, -26.0, 0)
         local hit = Workspace:Raycast(rayOrigin, rayDir, rayParams)
         if hit and hit.Position and typeof(hit.Position) == "Vector3" then
-            return hit.Position.Y + 2.15, hit.Normal
+            return hit.Position.Y + 2.0, hit.Normal
         else
             return currentY, Vector3.new(0, 1, 0)
         end
@@ -1804,46 +1876,47 @@ local function spawnEmperorTuxRide()
     local function applyEmperorPose(rootCF, headAnim, lWingRot, rWingRot, lFootOffset, rFootOffset)
         root.CFrame = rootCF
         bodyPart.CFrame = rootCF
-        bellyPart.CFrame = rootCF * CFrame.new(0, -0.15, -1.0)
-        chestGoldPart.CFrame = rootCF * CFrame.new(0, 0.95, -0.95)
+        bellyPart.CFrame = rootCF * CFrame.new(0, -0.2, -0.75)
+        chestGoldPart.CFrame = rootCF * CFrame.new(0, 0.9, -0.75)
 
-        local headCF = rootCF * (CFrame.new(0, 2.45, -0.2) * (headAnim or CFrame.new()))
+        local headCF = rootCF * (CFrame.new(0, 2.2, -0.1) * (headAnim or CFrame.new()))
         headPart.CFrame = headCF
-        neckGoldLeft.CFrame = headCF * (CFrame.new(-1.05, -0.45, -0.25) * CFrame.Angles(0, 0, math.rad(25)))
-        neckGoldRight.CFrame = headCF * (CFrame.new(1.05, -0.45, -0.25) * CFrame.Angles(0, 0, math.rad(-25)))
+        crownPart.CFrame = headCF * (CFrame.new(0, 0.95, 0) * CFrame.Angles(0, 0, math.rad(90)))
+        neckGoldLeft.CFrame = headCF * (CFrame.new(-0.85, -0.35, -0.15) * CFrame.Angles(0, 0, math.rad(22)))
+        neckGoldRight.CFrame = headCF * (CFrame.new(0.85, -0.35, -0.15) * CFrame.Angles(0, 0, math.rad(-22)))
 
-        local beakCF = headCF * (CFrame.new(0, -0.22, -1.45) * CFrame.Angles(math.rad(8), 0, 0))
+        local beakCF = headCF * (CFrame.new(0, -0.2, -1.2) * CFrame.Angles(math.rad(8), 0, 0))
         beakPart.CFrame = beakCF
-        beakStripePart.CFrame = headCF * CFrame.new(0, -0.28, -1.35)
+        beakStripePart.CFrame = headCF * CFrame.new(0, -0.25, -1.1)
 
-        leftEyeWhite.CFrame = headCF * CFrame.new(-0.55, 0.28, -0.95)
-        leftEyePupil.CFrame = headCF * CFrame.new(-0.55, 0.28, -1.03)
-        rightEyeWhite.CFrame = headCF * CFrame.new(0.55, 0.28, -0.95)
-        rightEyePupil.CFrame = headCF * CFrame.new(0.55, 0.28, -1.03)
+        leftEyeWhite.CFrame = headCF * CFrame.new(-0.48, 0.22, -0.8)
+        leftEyePupil.CFrame = headCF * CFrame.new(-0.48, 0.22, -0.86)
+        rightEyeWhite.CFrame = headCF * CFrame.new(0.48, 0.22, -0.8)
+        rightEyePupil.CFrame = headCF * CFrame.new(0.48, 0.22, -0.86)
 
-        local lBase = CFrame.new(-1.75, 0.35, 0) * CFrame.Angles(0, 0, math.rad(-16))
-        local rBase = CFrame.new(1.75, 0.35, 0) * CFrame.Angles(0, 0, math.rad(16))
+        local lBase = CFrame.new(-1.45, 0.25, 0) * CFrame.Angles(0, 0, math.rad(-16))
+        local rBase = CFrame.new(1.45, 0.25, 0) * CFrame.Angles(0, 0, math.rad(16))
         leftFlipper.CFrame = rootCF * (lBase * (lWingRot or CFrame.new()))
         rightFlipper.CFrame = rootCF * (rBase * (rWingRot or CFrame.new()))
 
-        local lfBase = CFrame.new(-0.85, -1.95, -0.2)
-        local rfBase = CFrame.new(0.85, -1.95, -0.2)
+        local lfBase = CFrame.new(-0.75, -1.75, -0.15)
+        local rfBase = CFrame.new(0.75, -1.75, -0.15)
         leftFoot.CFrame = rootCF * (lfBase * (lFootOffset or CFrame.new()))
         rightFoot.CFrame = rootCF * (rfBase * (rFootOffset or CFrame.new()))
 
-        tailPart.CFrame = rootCF * (CFrame.new(0, -1.2, 1.35) * CFrame.Angles(math.rad(-30), 0, 0))
+        tailPart.CFrame = rootCF * (CFrame.new(0, -1.1, 1.1) * CFrame.Angles(math.rad(-30), 0, 0))
 
-        -- Saddle & Reins
-        saddleBase.CFrame = rootCF * CFrame.new(0, 1.45, 0.2)
-        saddleCantle.CFrame = rootCF * (CFrame.new(0, 1.8, 1.2) * CFrame.Angles(math.rad(15), 0, 0))
-        saddlePummel.CFrame = rootCF * (CFrame.new(0, 1.7, -0.8) * CFrame.Angles(math.rad(-15), 0, 0))
-        leftStirrup.CFrame = rootCF * CFrame.new(-1.25, 0.7, 0.2)
-        rightStirrup.CFrame = rootCF * CFrame.new(1.25, 0.7, 0.2)
-        reinLeft.CFrame = rootCF * (CFrame.new(-0.55, 1.75, -1.1) * CFrame.Angles(math.rad(22), math.rad(-10), 0))
-        reinRight.CFrame = rootCF * (CFrame.new(0.55, 1.75, -1.1) * CFrame.Angles(math.rad(22), math.rad(10), 0))
+        -- Saddle & Reins (Sitting clearly on top of the back at Y = 1.85!)
+        saddleBase.CFrame = rootCF * CFrame.new(0, 1.85, 0.15)
+        saddleCantle.CFrame = rootCF * (CFrame.new(0, 2.25, 1.05) * CFrame.Angles(math.rad(15), 0, 0))
+        saddlePummel.CFrame = rootCF * (CFrame.new(0, 2.2, -0.75) * CFrame.Angles(math.rad(-15), 0, 0))
+        leftStirrup.CFrame = rootCF * CFrame.new(-1.3, 1.1, 0.15)
+        rightStirrup.CFrame = rootCF * CFrame.new(1.3, 1.1, 0.15)
+        reinLeft.CFrame = rootCF * (CFrame.new(-0.5, 2.05, -0.9) * CFrame.Angles(math.rad(20), math.rad(-10), 0))
+        reinRight.CFrame = rootCF * (CFrame.new(0.5, 2.05, -0.9) * CFrame.Angles(math.rad(20), math.rad(10), 0))
 
         if rideSeat then
-            rideSeat.CFrame = rootCF * CFrame.new(0, 1.7, 0.2)
+            rideSeat.CFrame = rootCF * CFrame.new(0, 2.1, 0.15)
         end
     end
 
@@ -1892,6 +1965,9 @@ local function spawnEmperorTuxRide()
     local idleClock = 0
     local lastTick = tick()
 
+    -- Initial Frame 1 Pose Setter (Immediately renders Emperor Tux without 1-frame delay)
+    applyEmperorPose(root.CFrame, CFrame.new(), CFrame.new(), CFrame.new(), CFrame.new(), CFrame.new())
+
     rideLoopConn = registerConn(RunService.RenderStepped:Connect(function()
         local now = tick()
         local dt = math.clamp(now - lastTick, 0, 0.1)
@@ -1912,14 +1988,26 @@ local function spawnEmperorTuxRide()
         if not currentChar then return end
         local hrp = currentChar:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
+        local hum = currentChar:FindFirstChildOfClass("Humanoid")
 
         if isRiderMounted then
-            -- Read user inputs (WASD / Joystick / Shift / Space)
+            -- Read user inputs: Virtual Thumbstick (mobile) via humanoid.MoveDirection + keyboard WASD
             local throttle = 0
             local steer = 0
+
+            if hum and hum.MoveDirection.Magnitude > 0.08 then
+                local tuxForward = Vector3.new(-math.sin(currentRideYaw), 0, -math.cos(currentRideYaw))
+                local tuxRight = Vector3.new(math.cos(currentRideYaw), 0, -math.sin(currentRideYaw))
+                local dotForward = hum.MoveDirection:Dot(tuxForward)
+                local dotRight = hum.MoveDirection:Dot(tuxRight)
+
+                if dotForward > 0.15 then throttle = 1 elseif dotForward < -0.15 then throttle = -1 end
+                if dotRight > 0.15 then steer = 1 elseif dotRight < -0.15 then steer = -1 end
+            end
+
             if rideSeat and rideSeat:IsA("VehicleSeat") then
-                throttle = rideSeat.Throttle
-                steer = rideSeat.Steer
+                if rideSeat.Throttle ~= 0 then throttle = rideSeat.Throttle end
+                if rideSeat.Steer ~= 0 then steer = rideSeat.Steer end
             end
 
             if UserInputService:IsKeyDown(Enum.KeyCode.W) or UserInputService:IsKeyDown(Enum.KeyCode.Up) then throttle = 1 end
@@ -2014,6 +2102,13 @@ local function spawnEmperorTuxRide()
                 applyEmperorPose(rootCF, headLook, CFrame.new(), CFrame.new(), CFrame.new(), CFrame.new())
                 updateRiderPosture(0, false)
             end
+
+            -- Ensure rider stays firmly seated on saddle without clipping or falling off
+            if hrp and hum then
+                hum.Sit = true
+                hrp.CFrame = root.CFrame * CFrame.new(0, 2.1, 0.15)
+                hrp.AssemblyLinearVelocity = Vector3.zero
+            end
         else
             -- Unmounted: Emperor Tux rests nearby
             slideEmitter.Enabled = false
@@ -2038,6 +2133,7 @@ local function spawnEmperorTuxRide()
         end
     end))
 end
+
 
 -- Automatic respawn support so Emperor Tux never disappears on player death
 if not rideCharAddedConn then
